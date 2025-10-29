@@ -1,224 +1,115 @@
-# VCC PKI - Public Key Infrastructure Library
+# VCC-PKI - Public Key Infrastructure System
 
-PKI/CA Library für das Covina Framework - Certificate Management, Document Signing, Code Verification.
+Vollständiges PKI-System für das VCC-Projekt mit Certificate Authority, Code-Signing und Service-Zertifikaten.
 
-## 🎯 Features
+## 📋 Übersicht
 
-- ✅ **Certificate Authority (CA) Management** - Root & Intermediate CA
-- ✅ **Document Signing & Verification** - PKCS#7, PDF, XML, JWS
-- ✅ **Code Signing** - Worker Verification für Covina
-- ✅ **Mock-Implementierungen** - Testing ohne echte Kryptographie
-- ✅ **Sigstore & TUF Integration** - Modern Security Frameworks
-- ✅ **CLI & REST API** - Flexible Verwaltung
-- ✅ **Production-Ready** - HSM Support, Monitoring, Compliance
+**Zweck:** Zentrale PKI-Infrastruktur für sichere Kommunikation und Code-Signierung
 
-## 📦 Installation
+**Technologie-Stack:**
+Python, FastAPI, cryptography, SQLite, Docker
 
-### Development Mode (Empfohlen für Covina Integration)
+## ✨ Hauptfunktionen
 
-```bash
-# PKI Package installieren
-cd C:\VCC\PKI
-pip install -e .
+- Certificate Authority (CA) Management
+- Service-Zertifikate für VCC-Services
+- Code-Signing für Python-Dateien
+- Pre-Commit Hooks für automatische Signierung
+- PKI Admin CLI
+- GUI für Bulk-Signing
+- Database-basiertes Zertifikats-Tracking
 
-# In Covina verwenden
-cd C:\VCC\Covina
-# requirements.txt: -e C:\VCC\PKI
-pip install -r requirements.txt
-```
+## 🚀 Schnellstart
 
-### Production Installation
+### Server starten
 
 ```bash
-pip install vcc-pki
+# Alle Services starten
+.\scripts\start_all.ps1
+
+# Nur PKI-Server
+.\scripts\start_pki_server.ps1
+
+# Server-Status prüfen
+.\scripts\status_server.ps1
 ```
 
-### Requirements
-
-- Python >= 3.10
-- cryptography >= 41.0.0
-- sigstore >= 2.0.0
-- tuf >= 3.0.0
-- click >= 8.1.0
-
-## 🚀 Quick Start
-
-### CLI Usage
+### Admin CLI
 
 ```bash
-# Certificate erstellen
-vcc-pki create-cert --common-name test.covina.local --output cert.json
-
-# Dokument signieren
-vcc-pki sign --document file.txt --cert cert.json --output signature.json
-
-# Signatur verifizieren
-vcc-pki verify --document file.txt --signature signature.json --cert cert.json
-```
-
-### Python API
-
-```python
-from vcc_pki.api import PKIService
-
-# Mock-Modus für Testing
-pki = PKIService(mode="mock")
+# PKI Admin CLI starten
+python pki_admin_cli.py
 
 # Zertifikat erstellen
-cert = pki.create_certificate(
-    common_name="test.covina.local",
-    organization="Covina",
-    validity_days=365
-)
-
-# Dokument signieren
-signature = pki.sign_document(
-    document_path="document.pdf",
-    certificate=cert["certificate"],
-    private_key=cert["private_key"]
-)
-
-# Verifizieren
-is_valid = pki.verify_document(
-    document_path="document.pdf",
-    signature=signature,
-    certificate=cert["certificate"]
-)
-
-print(f"Signature valid: {is_valid}")
+vcc-pki create-cert --service=my-service
 ```
 
-### Covina Integration
-
-```python
-from vcc_pki.api import PKIService
-from integrations.pki_integration import CovinaPKIIntegration
-
-# PKI Integration Layer
-pki_integration = CovinaPKIIntegration(mode="mock")
-
-# Dokument nach Ingestion signieren
-result = pki_integration.sign_ingested_document(
-    document_id="12345",
-    document_path=Path("ingested_doc.pdf"),
-    signer_cert=cert_data,
-    signer_key=key_data
-)
-
-# Signature Metadata speichern
-signature_store.store_signature(result)
-```
-
-## 📁 Package Structure
-
-```
-vcc_pki/
-├── __init__.py              # Package Exports
-├── __version__.py           # Version Info
-├── ca/                      # Certificate Authority
-│   ├── base_ca.py          # Abstract Base Class
-│   ├── root_ca.py          # Root CA Implementation
-│   └── ...
-├── signing/                 # Signing Services
-│   ├── base_signer.py      # Abstract Base Class
-│   ├── document_signer.py  # Document Signing
-│   └── ...
-├── mock/                    # Mock Implementations (Testing)
-│   ├── mock_ca.py          # Mock CA
-│   ├── mock_signer.py      # Mock Signer
-│   └── ...
-├── api/                     # API Layer
-│   ├── pki_service.py      # Unified PKI Service
-│   ├── cli.py              # CLI Interface
-│   └── ...
-└── utils/                   # Utilities
-    └── crypto_utils.py     # Cryptographic Helpers
-```
-
-## 🧪 Testing
+### Code-Signing
 
 ```bash
-# Alle Tests ausführen
-pytest tests/ -v
+# Einzelne Datei signieren
+python examples/simple_signing.py
 
-# Mit Coverage
-pytest tests/ --cov=vcc_pki --cov-report=html
-
-# Einzelne Tests
-pytest tests/test_ca.py -v
-pytest tests/test_signing.py::test_sign_document -v
+# Bulk-Signing GUI
+python scripts/bulk_sign_gui.py
 ```
 
-## 📖 Documentation
+## 📚 Dokumentation
 
-- [PKI Architecture](docs/PKI_ARCHITECTURE.md) - System Overview
-- [CA Setup Guide](docs/CA_SETUP_GUIDE.md) - Certificate Authority Setup
-- [API Reference](docs/API_REFERENCE.md) - Complete API Documentation
-- [Integration Guide](docs/INTEGRATION_GUIDE.md) - Covina Integration
-- [TODO Implementation](../Covina/docs/TODO_PKI_CA_IMPLEMENTATION.md) - Roadmap
+- [ROADMAP.md](ROADMAP.md) - Entwicklungsplan
+- [DEVELOPMENT.md](DEVELOPMENT.md) - Entwickler-Guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Beitragsrichtlinien
+- [docs/](docs/) - Detaillierte Dokumentation
+  - [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
+  - [CODE_SIGNING.md](docs/CODE_SIGNING.md)
+  - [PKI_ADMIN_CLI.md](docs/PKI_ADMIN_CLI.md)
+  - [PRE_COMMIT_HOOK_GUIDE.md](docs/PRE_COMMIT_HOOK_GUIDE.md)
 
-## 🔐 Security
+## 🔐 CA-Hierarchie
 
-- **Mock Mode:** Für Testing ohne echte Kryptographie
-- **Real Mode:** Produktionsreife X.509 Implementierung (Phase 4)
-- **HSM Support:** Hardware Security Module Integration (PKCS#11)
-- **Compliance:** Sigstore, TUF, Zero-Trust Architecture
-
-## 🤝 Integration with Covina
-
-Das VCC PKI Package ist speziell für die Integration mit dem Covina Framework entwickelt:
-
-1. **Document Signing:** Automatische Signierung nach Ingestion
-2. **Code Verification:** Worker Code Validation vor Ausführung
-3. **Signature Storage:** PostgreSQL Metadata Storage
-4. **API Endpoints:** Backend Integration für Verification
-
-Siehe [Integration Guide](docs/INTEGRATION_GUIDE.md) für Details.
-
-## 📝 Development Status
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | ✅ In Progress | Mock Implementation & Package Setup |
-| Phase 2 | ⏳ Planned | Testing & Validation |
-| Phase 3 | ⏳ Planned | Documentation |
-| Phase 4 | ⏳ Planned | Real Cryptography (X.509, PKCS#7) |
-| Phase 5 | ⏳ Planned | Covina Integration |
-| Phase 6 | ⏳ Planned | Production Readiness |
-
-## 🛠️ CLI Commands Reference
-
-```bash
-# Certificate Management
-vcc-pki create-cert --common-name <name> --output <file>
-vcc-pki list-certs
-vcc-pki revoke-cert --serial <serial>
-
-# Document Signing
-vcc-pki sign --document <file> --cert <cert> --output <sig>
-vcc-pki verify --document <file> --signature <sig> --cert <cert>
-
-# System Information
-vcc-pki version
-vcc-pki status
+```
+Root CA
+└── Intermediate CA
+    ├── Service Certificates
+    │   ├── covina-backend
+    │   ├── covina-ingestion
+    │   ├── veritas-backend
+    │   └── pki-server
+    └── Code Signing Certificates
 ```
 
-## 📄 License
+## 🛠️ Komponenten
 
-MIT License - See LICENSE file for details.
+### PKI Server
+- FastAPI-basierter REST-API Server
+- Port: 8443 (HTTPS)
+- Datenbank: SQLite
 
-## 👥 Authors
+### CA Manager
+- Root CA und Intermediate CA
+- Zertifikatserstellung und -verwaltung
 
-VCC Team - Covina Framework Development
+### Service Certificate Manager
+- Service-spezifische Zertifikate
+- Automatische Erneuerung
 
-## 🔗 Related Projects
+### Code Signing
+- Python-Code-Signierung
+- Batch-Signierung
+- Pre-Commit Hook Integration
 
-- **Covina:** Document Processing & Knowledge Management
-- **Veritas:** Document Verification System
-- **Clara:** AI-Powered Analysis
-- **VCC PKI System:** Production PKI Implementation (siehe `vcc-pki-system/`)
+## 🔗 Verwandte Repositories
+
+Teil des [VCC-Projekts](https://github.com/makr-code/VCC)
+
+## 📄 Lizenz
+
+Private Repository - Alle Rechte vorbehalten
+
+## 👤 Autor
+
+**makr-code** - [GitHub](https://github.com/makr-code)
 
 ---
 
-**Note:** Dieses Package befindet sich in aktiver Entwicklung (Phase 1). 
-Für produktionsreife PKI siehe `vcc-pki-system/` Verzeichnis.
+*Letzte Aktualisierung: 29.10.2025*
