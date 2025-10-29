@@ -1,0 +1,13 @@
+{
+  "ca_type": "root",
+  "common_name": "VCC Root CA",
+  "organization": "VCC Framework",
+  "country": "DE",
+  "serial_number": "420428949876756288350466038758762471310309479695",
+  "fingerprint_sha256": "1a092cd0d61891eaba08b20f089d97851a4fdc00a1ce1640514486b25853de48",
+  "not_before": "2025-10-13T15:52:27.701364+00:00",
+  "not_after": "2035-10-11T15:52:27.701364+00:00",
+  "key_size": 4096,
+  "encrypted": true,
+  "created_at": "2025-10-13T15:52:27.714137+00:00"
+}

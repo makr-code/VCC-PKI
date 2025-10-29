@@ -1,0 +1,553 @@
+# VCC PKI TSA - Production Kubernetes Deployment
+# Kubernetes manifests for TSA service deployment in Brandenburg Government infrastructure
+
+---
+# Namespace for VCC TSA
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vcc-tsa-production
+  labels:
+    name: vcc-tsa-production
+    environment: production
+    component: timestamp-authority
+
+---
+# ConfigMap for TSA Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vcc-tsa-config
+  namespace: vcc-tsa-production
+data:
+  TSA_POLICY_OID: "1.3.6.1.4.1.55555.1.2.1"
+  TSA_HASH_ALGORITHMS: "sha256,sha384,sha512"
+  TSA_MAX_REQUEST_SIZE: "10485760"  # 10MB
+  TSA_REQUEST_TIMEOUT: "30"
+  TSA_PERFORMANCE_TARGET_MS: "200"
+  LOG_LEVEL: "INFO"
+  METRICS_ENABLED: "true"
+  AUDIT_ENABLED: "true"
+
+---
+# Secret for sensitive TSA configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vcc-tsa-secrets
+  namespace: vcc-tsa-production
+type: Opaque
+data:
+  # Base64 encoded values (replaced in deployment)
+  tsa-hsm-pin: VFNBLUhTTS1QSU4tUExBQ0VIT0xERVI=
+  database-url: cG9zdGdyZXNxbDovL3VzZXI6cGFzc0Bwb3N0Z3JlczozNTQzMi92Y2NfcGtp
+  redis-url: cmVkaXM6Ly86cGFzc3dvcmRAcmVkaXM6NjM3OS8y
+
+---
+# Deployment for VCC TSA Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vcc-tsa-service
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+    component: timestamp-authority
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: vcc-tsa
+      component: timestamp-authority
+  template:
+    metadata:
+      labels:
+        app: vcc-tsa
+        component: timestamp-authority
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: vcc-tsa-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: vcc-tsa
+        image: vcc/tsa-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: VCC_ENVIRONMENT
+          value: "production"
+        - name: TSA_HSM_PIN
+          valueFrom:
+            secretKeyRef:
+              name: vcc-tsa-secrets
+              key: tsa-hsm-pin
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: vcc-tsa-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: vcc-tsa-secrets
+              key: redis-url
+        envFrom:
+        - configMapRef:
+            name: vcc-tsa-config
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+        volumeMounts:
+        - name: tsa-logs
+          mountPath: /app/logs
+        - name: tsa-data
+          mountPath: /app/data
+        - name: hsm-client-config
+          mountPath: /etc/hsm
+          readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: tsa-logs
+        emptyDir: {}
+      - name: tsa-data
+        persistentVolumeClaim:
+          claimName: vcc-tsa-data-pvc
+      - name: hsm-client-config
+        secret:
+          secretName: vcc-hsm-client-config
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        node-role.kubernetes.io/worker: "true"
+      tolerations:
+      - key: "vcc.brandenburg.de/tsa"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - vcc-tsa
+              topologyKey: kubernetes.io/hostname
+
+---
+# Service Account for TSA
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vcc-tsa-service-account
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+
+---
+# ClusterRole for TSA service
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vcc-tsa-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for TSA service
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vcc-tsa-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vcc-tsa-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: vcc-tsa-service-account
+  namespace: vcc-tsa-production
+
+---
+# Service for VCC TSA
+apiVersion: v1
+kind: Service
+metadata:
+  name: vcc-tsa-service
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+    component: timestamp-authority
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: vcc-tsa
+    component: timestamp-authority
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vcc-tsa-ingress
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "brandenburg-ca-issuer"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+spec:
+  tls:
+  - hosts:
+    - tsa.vcc.brandenburg.de
+    secretName: vcc-tsa-tls
+  rules:
+  - host: tsa.vcc.brandenburg.de
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vcc-tsa-service
+            port:
+              number: 80
+
+---
+# HorizontalPodAutoscaler for TSA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vcc-tsa-hpa
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vcc-tsa-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+
+---
+# PersistentVolumeClaim for TSA data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vcc-tsa-data-pvc
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs-storage
+
+---
+# NetworkPolicy for TSA security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vcc-tsa-network-policy
+  namespace: vcc-tsa-production
+spec:
+  podSelector:
+    matchLabels:
+      app: vcc-tsa
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from nginx ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow ingress from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow egress to PostgreSQL
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vcc-database
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow egress to Redis
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vcc-cache
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow egress to HSM network
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: vcc-hsm
+    ports:
+    - protocol: TCP
+      port: 1792
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# PodDisruptionBudget for TSA availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vcc-tsa-pdb
+  namespace: vcc-tsa-production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: vcc-tsa
+      component: timestamp-authority
+
+---
+# ServiceMonitor for Prometheus monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vcc-tsa-service-monitor
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+    monitoring: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: vcc-tsa
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
+
+---
+# PrometheusRule for TSA alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vcc-tsa-alerts
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+    monitoring: prometheus
+spec:
+  groups:
+  - name: vcc-tsa.rules
+    rules:
+    - alert: VCCTSAHighErrorRate
+      expr: rate(tsa_requests_total{status="error"}[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: critical
+        service: vcc-tsa
+      annotations:
+        summary: "VCC TSA high error rate"
+        description: "VCC TSA error rate is {{ $value }} requests per second"
+    
+    - alert: VCCTSAHighLatency
+      expr: histogram_quantile(0.95, rate(tsa_request_duration_seconds_bucket[5m])) > 0.5
+      for: 5m
+      labels:
+        severity: warning
+        service: vcc-tsa
+      annotations:
+        summary: "VCC TSA high latency"
+        description: "VCC TSA 95th percentile latency is {{ $value }}s"
+    
+    - alert: VCCTSAServiceDown
+      expr: up{job="vcc-tsa-service"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: vcc-tsa
+      annotations:
+        summary: "VCC TSA service is down"
+        description: "VCC TSA service has been down for more than 1 minute"
+    
+    - alert: VCCTSACertificateExpiry
+      expr: tsa_certificate_expiry_days < 30
+      for: 0m
+      labels:
+        severity: warning
+        service: vcc-tsa
+      annotations:
+        summary: "VCC TSA certificate expiring soon"
+        description: "VCC TSA certificate expires in {{ $value }} days"
+
+---
+# CronJob for TSA maintenance tasks
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vcc-tsa-maintenance
+  namespace: vcc-tsa-production
+  labels:
+    app: vcc-tsa
+    component: maintenance
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: vcc-tsa-service-account
+          containers:
+          - name: maintenance
+            image: vcc/tsa-maintenance:1.0.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting TSA maintenance tasks..."
+              python /app/maintenance/cleanup_expired_tokens.py
+              python /app/maintenance/archive_old_requests.py
+              python /app/maintenance/generate_daily_report.py
+              echo "TSA maintenance completed."
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vcc-tsa-secrets
+                  key: database-url
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001

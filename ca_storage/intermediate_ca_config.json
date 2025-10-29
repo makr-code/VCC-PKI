@@ -1,0 +1,14 @@
+{
+  "ca_type": "intermediate",
+  "common_name": "VCC Intermediate CA",
+  "organization": "VCC Framework",
+  "country": "DE",
+  "serial_number": "439874986987819945149819945141410237683642825107",
+  "fingerprint_sha256": "9739ae59ad899ab9737291999761ae08b1404e14c912cf8ec7e1a91ee0ef1a2b",
+  "not_before": "2025-10-13T15:52:34.799901+00:00",
+  "not_after": "2030-10-12T15:52:34.799901+00:00",
+  "key_size": 2048,
+  "encrypted": true,
+  "signed_by": "root_ca",
+  "created_at": "2025-10-13T15:52:34.811018+00:00"
+}

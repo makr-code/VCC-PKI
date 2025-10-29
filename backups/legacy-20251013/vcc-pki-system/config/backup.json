@@ -1,0 +1,34 @@
+{
+  "backup": {
+    "root_directory": "backups",
+    "retention": {
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 12,
+      "yearly": 3
+    },
+    "compression": "gzip",
+    "encryption": {
+      "enabled": false,
+      "key_file": "backup.key"
+    },
+    "components": {
+      "database": true,
+      "certificates": true,
+      "private_keys": true,
+      "configuration": true,
+      "logs": false
+    },
+    "remote_sync": {
+      "enabled": false,
+      "type": "rsync",
+      "destination": "backup-server:/vcc-pki-backups/",
+      "ssh_key": "~/.ssh/backup_key"
+    }
+  },
+  "recovery": {
+    "staging_directory": "recovery-staging",
+    "verify_integrity": true,
+    "create_rollback": true
+  }
+}

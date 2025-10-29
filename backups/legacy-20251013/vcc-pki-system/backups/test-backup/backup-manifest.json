@@ -1,0 +1,43 @@
+{
+  "backup_name": "test-backup",
+  "backup_type": "manual",
+  "created_at": "2025-10-02T09:35:29.517734",
+  "version": "1.0",
+  "components": {
+    "database": {
+      "status": "success",
+      "files": [
+        "backups\\test-backup\\database\\vcc_pki.db",
+        "backups\\test-backup\\database\\schema_and_data.sql"
+      ],
+      "size_bytes": 40692,
+      "integrity_check": "ok"
+    },
+    "certificates": {
+      "status": "skipped",
+      "reason": "Certificates directory not found"
+    },
+    "private_keys": {
+      "status": "skipped",
+      "reason": "Private keys directory not found"
+    },
+    "configuration": {
+      "status": "success",
+      "files": [
+        "config\\backup.json"
+      ],
+      "file_count": 1,
+      "size_bytes": 745
+    }
+  },
+  "checksums": {
+    "configuration\\backup.json": "9fe40ca1250bf5d24a471286da2ea445c4ff4c12b7638d91b3d8fd069b2d3292",
+    "database\\schema_and_data.sql": "f080e1f66fc2f9a1f5536b244b899ed9c648517513914bfc50f8bd0bddd39022",
+    "database\\vcc_pki.db": "06112a6b27ee82b4e94dfb469abd66edb48e1a3997052ac6f047804b9c10ca3a"
+  },
+  "metadata": {
+    "hostname": "windows",
+    "platform": "win32",
+    "python_version": "3.13.6 (tags/v3.13.6:4e66535, Aug  6 2025, 14:36:00) [MSC v.1944 64 bit (AMD64)]"
+  }
+}

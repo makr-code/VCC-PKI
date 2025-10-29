@@ -1,0 +1,173 @@
+# VCC PKI Server Configuration
+# =============================
+
+server:
+  host: "127.0.0.1"
+  port: 8443
+  workers: 1
+  reload: false
+  
+  # SSL/TLS Configuration
+  ssl:
+    enabled: true
+    cert_file: "../service_certificates/pki-server/cert.pem"
+    key_file: "../service_certificates/pki-server/key.pem"
+    ca_file: "../ca_storage/ca_chain.pem"
+    
+  # mTLS Configuration (for service-to-service auth)
+  mtls:
+    enabled: false  # Enable in production
+    verify_client: true
+    client_ca_file: "../ca_storage/intermediate_ca.pem"
+
+# CA Configuration
+ca:
+  root_ca:
+    storage_dir: "../ca_storage"
+    cert_file: "root_ca.pem"
+    key_file: "root_ca.key"
+    validity_days: 3650  # 10 years
+    
+  intermediate_ca:
+    storage_dir: "../ca_storage"
+    cert_file: "intermediate_ca.pem"
+    key_file: "intermediate_ca.key"
+    validity_days: 1825  # 5 years
+
+# Certificate Management
+certificates:
+  storage_dir: "../service_certificates"
+  default_validity_days: 365
+  min_validity_days: 1
+  max_validity_days: 730  # 2 years
+  
+  # Auto-renewal settings
+  auto_renewal:
+    enabled: true
+    renew_before_days: 30
+    check_interval_hours: 6
+  
+  # Certificate policies
+  policies:
+    key_size: 2048
+    signature_algorithm: "SHA256"
+    allowed_key_usages:
+      - "digitalSignature"
+      - "keyEncipherment"
+    extended_key_usages:
+      - "serverAuth"
+      - "clientAuth"
+
+# Service Registry
+service_registry:
+  storage_file: "../database/service_registry.json"
+  health_check_enabled: true
+  health_check_interval_minutes: 5
+  
+# Database Configuration (SQLite for now, PostgreSQL later)
+database:
+  type: "sqlite"
+  path: "../database/pki_server.db"
+  
+  # PostgreSQL (for production)
+  # type: "postgresql"
+  # host: "localhost"
+  # port: 5432
+  # database: "vcc_pki"
+  # user: "pki_admin"
+  # password: "${DB_PASSWORD}"
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # File logging
+  file:
+    enabled: true
+    path: "../logs/pki_server.log"
+    max_size_mb: 100
+    backup_count: 10
+    
+  # Audit logging
+  audit:
+    enabled: true
+    path: "../logs/audit.log"
+    
+  # Format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Security
+security:
+  # API Authentication
+  api_auth:
+    enabled: true
+    type: "mtls"  # mtls, bearer_token, api_key
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst: 10
+    
+  # CORS
+  cors:
+    enabled: true
+    allowed_origins:
+      - "https://localhost:*"
+      - "https://127.0.0.1:*"
+      - "https://*.vcc.local"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+    allowed_headers:
+      - "Authorization"
+      - "Content-Type"
+      - "X-CA-Password"
+
+# Monitoring & Metrics
+monitoring:
+  enabled: true
+  metrics_endpoint: "/metrics"
+  health_endpoint: "/health"
+  
+  # Prometheus integration
+  prometheus:
+    enabled: false
+    port: 9090
+
+# Backup & Recovery
+backup:
+  enabled: true
+  schedule: "daily"  # daily, weekly, monthly
+  retention_days: 90
+  backup_dir: "../backups"
+  
+  # What to backup
+  include:
+    - "ca_storage/"
+    - "service_certificates/"
+    - "database/"
+    - "config/"
+
+# Notifications (for cert expiry, errors, etc.)
+notifications:
+  enabled: false
+  
+  # Email notifications
+  email:
+    enabled: false
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    smtp_user: "pki@example.com"
+    smtp_password: "${SMTP_PASSWORD}"
+    from_address: "pki@example.com"
+    alert_recipients:
+      - "admin@example.com"
+  
+  # Slack notifications
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#pki-alerts"

@@ -1,0 +1,292 @@
+# VCC PKI - Docker Compose Integration
+# Production-ready deployment für das VCC-Ecosystem mit integrierter PKI
+
+version: '3.8'
+
+services:
+  # VCC PKI Core Services
+  vcc-pki-api:
+    build: ./vcc-pki
+    container_name: vcc-pki-api
+    environment:
+      - DATABASE_ENCRYPTION_KEY_FILE=/run/secrets/db_encryption_key
+      - HSM_PIN_FILE=/run/secrets/hsm_pin
+      - VCC_ORGANIZATION=brandenburg
+      - VCC_ENVIRONMENT=production
+    volumes:
+      - vcc-pki-data:/app/data
+      - vcc-pki-certs:/app/certificates
+      - ./hsm:/dev/hsm:rw  # HSM Device Mount
+    networks:
+      - vcc-internal
+      - vcc-pki-network
+    ports:
+      - "8443:8443"  # HTTPS nur für PKI Management Interface
+    secrets:
+      - db_encryption_key
+      - hsm_pin
+    healthcheck:
+      test: ["CMD", "curl", "-k", "https://localhost:8443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # VCC Service Discovery Agent
+  vcc-service-discovery:
+    build: ./vcc-pki/discovery
+    container_name: vcc-service-discovery
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443
+      - DISCOVERY_INTERVAL=60
+      - AUTO_PROVISION_CERTS=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker Service Discovery
+    networks:
+      - vcc-internal
+    depends_on:
+      - vcc-pki-api
+
+  # Existing VCC Services mit PKI Integration
+  argus-backend:
+    build: ./Argus/backend
+    container_name: argus-backend
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443
+      - VCC_SERVICE_ID=argus
+      - VCC_MTLS_ENABLED=true
+      - VCC_CLIENT_CERT_PATH=/app/certs/argus-service.crt
+      - VCC_CLIENT_KEY_PATH=/app/certs/argus-service.key
+    volumes:
+      - vcc-service-certs:/app/certs:ro
+      - argus-data:/app/data
+    networks:
+      - vcc-internal
+    ports:
+      - "8000:8000"
+    depends_on:
+      - vcc-pki-api
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  argus-frontend:
+    build: ./Argus/frontend  
+    container_name: argus-frontend
+    environment:
+      - VCC_BACKEND_URL=https://argus-backend:8000
+      - VCC_PKI_ENABLED=true
+    networks:
+      - vcc-internal
+    ports:
+      - "3000:3000"
+    depends_on:
+      - argus-backend
+
+  covina-core:
+    build: ./Covina
+    container_name: covina-management-core
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443
+      - VCC_SERVICE_ID=covina
+      - VCC_WORKER_SIGNING_REQUIRED=true
+      - UDS3_INTEGRITY_CHECKS=enabled
+    volumes:
+      - vcc-service-certs:/app/certs:ro
+      - covina-data:/app/data
+      - covina-workers:/app/workers:ro  # Signed worker modules
+    networks:
+      - vcc-internal
+      - vcc-database-network
+    depends_on:
+      - vcc-pki-api
+      - postgres
+
+  clara-engine:
+    build: ./Clara
+    container_name: clara-ai-engine  
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443
+      - VCC_SERVICE_ID=clara
+      - VCC_MODEL_VERIFICATION_REQUIRED=true
+      - LORA_ADAPTER_PATH=/app/models/adapters
+    volumes:
+      - vcc-service-certs:/app/certs:ro
+      - clara-models:/app/models:ro  # Signed KI models and adapters
+      - clara-temp:/tmp
+    networks:
+      - vcc-internal
+    depends_on:
+      - vcc-pki-api
+      - ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  veritas-orchestrator:
+    build: ./veritas
+    container_name: veritas-pipeline-orchestrator
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443  
+      - VCC_SERVICE_ID=veritas
+      - VCC_PIPELINE_SIGNING_REQUIRED=true
+      - PIPELINE_CONFIG_PATH=/app/pipelines
+    volumes:
+      - vcc-service-certs:/app/certs:ro
+      - veritas-pipelines:/app/pipelines:ro  # Signed pipeline configurations
+      - veritas-data:/app/data
+    networks:
+      - vcc-internal
+    depends_on:
+      - vcc-pki-api
+      - covina-core
+
+  vpb-services:
+    build: ./VPB
+    container_name: vpb-visual-processing
+    environment:
+      - VCC_PKI_API_URL=https://vcc-pki-api:8443
+      - VCC_SERVICE_ID=vpb  
+      - VCC_ASSET_SIGNING_ENABLED=true
+      - UI_BUNDLE_PATH=/app/ui-bundles
+    volumes:
+      - vcc-service-certs:/app/certs:ro
+      - vpb-assets:/app/assets:ro  # Signed visual assets
+      - vpb-ui-bundles:/app/ui-bundles:ro  # Signed UI bundles
+    networks:
+      - vcc-internal
+    depends_on:
+      - vcc-pki-api
+
+  # Supporting Infrastructure
+  postgres:
+    image: postgres:15-alpine
+    container_name: vcc-postgres
+    environment:
+      - POSTGRES_DB=vcc_db
+      - POSTGRES_USER=vcc_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - vcc-database-network
+    secrets:
+      - postgres_password
+    
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vcc-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - vcc-internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Monitoring & Logging
+  vcc-monitoring:
+    image: prom/prometheus:latest
+    container_name: vcc-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - vcc-internal
+    ports:
+      - "9090:9090"
+
+  vcc-log-collector:
+    build: ./monitoring/log-collector
+    container_name: vcc-log-collector
+    environment:
+      - VCC_PKI_AUDIT_ENABLED=true
+      - SIEM_ENDPOINT=https://siem.brandenburg.de/api/events
+    volumes:
+      - vcc-service-certs:/app/certs:ro  # Für authentifizierte SIEM-Übertragung
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - vcc-internal
+
+networks:
+  vcc-internal:
+    driver: bridge
+    internal: true  # Internes Netzwerk für VCC Services
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  
+  vcc-pki-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+  
+  vcc-database-network:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+volumes:
+  # VCC PKI Volumes
+  vcc-pki-data:
+    driver: local
+  vcc-pki-certs:
+    driver: local
+  vcc-service-certs:
+    driver: local  # Shared volume für Service-Zertifikate
+  
+  # Service-specific Volumes  
+  argus-data:
+    driver: local
+  covina-data:
+    driver: local
+  covina-workers:
+    driver: local
+  clara-models:
+    driver: local
+  clara-temp:
+    driver: local
+  veritas-pipelines:
+    driver: local
+  veritas-data:
+    driver: local
+  vpb-assets:
+    driver: local
+  vpb-ui-bundles:
+    driver: local
+  
+  # Infrastructure Volumes
+  postgres-data:
+    driver: local
+  ollama-data:
+    driver: local
+  prometheus-data:
+    driver: local
+
+secrets:
+  db_encryption_key:
+    file: ./secrets/database_encryption.key
+  hsm_pin:
+    file: ./secrets/hsm_pin.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+
+# VCC PKI Health Check Script
+# ./scripts/vcc-health-check.sh

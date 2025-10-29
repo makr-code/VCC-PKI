@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+"""
+VCC Git Pre-Commit Hook
+
+Automatically validates code classification before commit:
+1. Check that all .py files have VCC headers
+2. Verify classification is appropriate
+3. Scan for hard-coded secrets
+4. Verify header integrity
+
+Installation:
+    # Unix/Linux/Mac
+    cp scripts/pre-commit .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
+    
+    # Windows
+    copy scripts\pre-commit .git\hooks\pre-commit
+    # Configure git to run Python hooks:
+    git config core.hooksPath .git/hooks
+
+Usage:
+    This hook runs automatically on 'git commit'
+    To bypass (emergency only): git commit --no-verify
+"""
+
+import os
+import sys
+import subprocess
+import re
+from pathlib import Path
+from typing import List, Tuple, Optional
+
+
+# ==================== Configuration ====================
+
+# Add src/ to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+try:
+    from code_header import HeaderExtractor
+    from classify_code import CodeClassifier, FORBIDDEN_PATTERNS
+except ImportError:
+    print("ERROR: Cannot import VCC tools. Run from repository root.")
+    sys.exit(1)
+
+
+# Colors for terminal output
+class Colors:
+    """ANSI color codes for terminal output."""
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
+
+
+def colored(text: str, color: str) -> str:
+    """Colorize text for terminal."""
+    if sys.platform == 'win32':
+        # Windows may not support ANSI colors in all terminals
+        return text
+    return f"{color}{text}{Colors.RESET}"
+
+
+# ==================== Git Helper Functions ====================
+
+def get_staged_files() -> List[str]:
+    """Get list of staged Python files."""
+    try:
+        result = subprocess.run(
+            ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACM'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        files = result.stdout.strip().split('\n')
+        # Filter for .py files only
+        py_files = [f for f in files if f.endswith('.py') and os.path.exists(f)]
+        return py_files
+    
+    except subprocess.CalledProcessError as e:
+        print(colored(f"ERROR: Failed to get staged files: {e}", Colors.RED))
+        return []
+
+
+def get_file_content(file_path: str) -> Optional[str]:
+    """Read file content."""
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            return f.read()
+    except Exception as e:
+        print(colored(f"ERROR: Cannot read {file_path}: {e}", Colors.RED))
+        return None
+
+
+# ==================== Validation Functions ====================
+
+def check_header_exists(file_path: str, content: str) -> Tuple[bool, Optional[str]]:
+    """
+    Check if file has VCC header.
+    
+    Returns:
+        (success, error_message)
+    """
+    result = HeaderExtractor.extract_header(content)
+    
+    if result is None:
+        return False, f"Missing VCC header in {file_path}"
+    
+    return True, None
+
+
+def check_classification(file_path: str, content: str) -> Tuple[bool, List[str]]:
+    """
+    Check if classification is appropriate.
+    
+    Returns:
+        (success, warnings)
+    """
+    warnings = []
+    
+    # Get header
+    result = HeaderExtractor.extract_header(content)
+    if result is None:
+        return False, ["No header to check classification"]
+    
+    header, _ = result
+    current_classification = header.security_info.classification
+    
+    # Auto-classify
+    classifier = CodeClassifier()
+    suggested = classifier.classify_file(file_path)
+    
+    # Check for security violations
+    if suggested.suggested_classification == 'ERROR':
+        return False, [
+            f"SECURITY VIOLATION in {file_path}:",
+            f"  {suggested.reasons[0]}",
+            "  DO NOT COMMIT THIS FILE!"
+        ]
+    
+    # Compare classifications
+    if current_classification != suggested.suggested_classification:
+        # Check if it's a significant difference
+        levels = {'PUBLIC': 1, 'INTERNAL': 2, 'CONFIDENTIAL': 3, 'SECRET': 4}
+        current_level = levels.get(current_classification, 2)
+        suggested_level = levels.get(suggested.suggested_classification, 2)
+        
+        diff = abs(current_level - suggested_level)
+        
+        if diff >= 2:
+            # Major difference - warn
+            warnings.append(
+                f"Classification mismatch in {file_path}:"
+            )
+            warnings.append(
+                f"  Current: {current_classification}, Suggested: {suggested.suggested_classification}"
+            )
+            warnings.append(
+                f"  Confidence: {int(suggested.confidence * 100)}%"
+            )
+            warnings.append(
+                f"  Reasons: {', '.join(suggested.reasons[:2])}"
+            )
+            warnings.append(
+                f"  Consider re-classifying or review manually."
+            )
+    
+    return True, warnings
+
+
+def check_secrets(file_path: str, content: str) -> Tuple[bool, List[str]]:
+    """
+    Check for hard-coded secrets.
+    
+    Returns:
+        (success, errors)
+    """
+    errors = []
+    
+    for pattern, description in FORBIDDEN_PATTERNS:
+        matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
+        for match in matches:
+            # Get line number
+            line_num = content[:match.start()].count('\n') + 1
+            errors.append(
+                f"SECURITY VIOLATION in {file_path}:{line_num}:"
+            )
+            errors.append(
+                f"  {description}"
+            )
+            errors.append(
+                f"  Matched: {match.group()[:50]}..."
+            )
+    
+    return len(errors) == 0, errors
+
+
+def check_header_integrity(file_path: str, content: str) -> Tuple[bool, List[str]]:
+    """
+    Check header integrity (hash matches content).
+    
+    Returns:
+        (success, warnings)
+    """
+    warnings = []
+    
+    result = HeaderExtractor.extract_header(content)
+    if result is None:
+        return True, []  # No header to check
+    
+    header, source_without_header = result
+    
+    # Compute current hash
+    import hashlib
+    current_hash = hashlib.sha256(source_without_header.encode('utf-8')).hexdigest()
+    stored_hash = header.file_identity.content_hash_sha256
+    
+    if stored_hash and current_hash != stored_hash:
+        warnings.append(
+            f"Header integrity mismatch in {file_path}:"
+        )
+        warnings.append(
+            f"  Code changed since header generation."
+        )
+        warnings.append(
+            f"  Run: python src/code_header.py generate --file {file_path}"
+        )
+    
+    return True, warnings
+
+
+# ==================== Main Pre-Commit Logic ====================
+
+def main():
+    """Main pre-commit hook logic."""
+    print(colored("=" * 80, Colors.CYAN))
+    print(colored("VCC Pre-Commit Hook - Code Classification Validation", Colors.CYAN))
+    print(colored("=" * 80, Colors.CYAN))
+    print()
+    
+    # Get staged files
+    staged_files = get_staged_files()
+    
+    if not staged_files:
+        print(colored("No Python files staged for commit.", Colors.GREEN))
+        return 0
+    
+    print(f"Checking {len(staged_files)} Python file(s)...")
+    print()
+    
+    # Track results
+    errors = []
+    warnings = []
+    checked_files = 0
+    
+    # Check each file
+    for file_path in staged_files:
+        content = get_file_content(file_path)
+        if content is None:
+            continue
+        
+        checked_files += 1
+        file_warnings = []
+        file_errors = []
+        
+        # 1. Check for VCC header
+        success, error = check_header_exists(file_path, content)
+        if not success:
+            file_errors.append(error)
+            file_errors.append(f"  Fix: python src/code_header.py generate --file {file_path}")
+        
+        # 2. Check for hard-coded secrets (CRITICAL)
+        if success:  # Only if header exists
+            success, secret_errors = check_secrets(file_path, content)
+            if not success:
+                file_errors.extend(secret_errors)
+        
+        # 3. Check classification appropriateness
+        if success:
+            success, class_warnings = check_classification(file_path, content)
+            if not success:
+                file_errors.extend(class_warnings)
+            else:
+                file_warnings.extend(class_warnings)
+        
+        # 4. Check header integrity
+        if success:
+            success, integrity_warnings = check_header_integrity(file_path, content)
+            file_warnings.extend(integrity_warnings)
+        
+        # Report results for this file
+        if file_errors:
+            print(colored(f"✗ {file_path}", Colors.RED))
+            for error in file_errors:
+                print(colored(f"  {error}", Colors.RED))
+            errors.extend(file_errors)
+        elif file_warnings:
+            print(colored(f"⚠ {file_path}", Colors.YELLOW))
+            for warning in file_warnings:
+                print(colored(f"  {warning}", Colors.YELLOW))
+            warnings.extend(file_warnings)
+        else:
+            print(colored(f"✓ {file_path}", Colors.GREEN))
+    
+    print()
+    print(colored("=" * 80, Colors.CYAN))
+    
+    # Summary
+    if errors:
+        print(colored(f"COMMIT REJECTED: {len(errors)} error(s) found!", Colors.RED))
+        print()
+        print(colored("Fix the errors above and try again.", Colors.RED))
+        print(colored("To bypass (emergency only): git commit --no-verify", Colors.YELLOW))
+        return 1
+    
+    if warnings:
+        print(colored(f"⚠ {len(warnings)} warning(s) found", Colors.YELLOW))
+        print()
+        print(colored("Review warnings before commit.", Colors.YELLOW))
+        print(colored("Proceeding with commit...", Colors.GREEN))
+        print()
+    else:
+        print(colored(f"✓ All {checked_files} file(s) passed validation!", Colors.GREEN))
+        print()
+    
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print()
+        print(colored("Commit cancelled by user.", Colors.YELLOW))
+        sys.exit(1)
+    except Exception as e:
+        print()
+        print(colored(f"ERROR: Pre-commit hook failed: {e}", Colors.RED))
+        print(colored("To bypass (emergency only): git commit --no-verify", Colors.YELLOW))
+        sys.exit(1)

@@ -1,0 +1,122 @@
+
+Das Fundament des Vertrauens: Die Architektur einer souveränen Public Key Infrastructure für das VCC-Ökosystem
+
+
+Einleitung: Vom technischen Werkzeug zum strategischen Wegbereiter
+
+Die Anfrage, ein Python-Skript zur Erstellung einer privaten Certificate Authority (CA) in den Sicherheitskontext des Veritas-Covina-Clara (VCC)-Ökosystems einzuordnen, dient als Ausgangspunkt für eine weitaus fundamentalere Analyse. Dieser Bericht wird diese Anfrage aufgreifen und die private CA von einem einfachen Hilfsprogramm zu dem erheben, was sie in diesem Kontext sein muss: der unverzichtbare Eckpfeiler der gesamten Sicherheitsphilosophie des VCC.
+Die zentrale These dieses Berichts ist, dass eine souveräne, akribisch verwaltete Public Key Infrastructure (PKI) kein optionales Zusatzmodul ist, sondern die primäre Basistechnologie, die die strategischen Kernziele des VCC erst ermöglicht. Zu diesen Zielen gehören die Realisierung einer echten Zero-Trust-Sicherheitsarchitektur, die Gewährleistung digitaler Souveränität für die brandenburgische Verwaltung und die Bereitstellung der auditierbaren Integritätsnachweise, die durch den EU AI Act und die DSGVO zwingend gefordert werden.1
+Dieser Bericht wird zunächst die strategische Notwendigkeit der PKI begründen, anschließend ihre spezifischen architektonischen Integrationspunkte innerhalb des VCC detailliert beschreiben und schließlich einen gehärteten, produktionsreifen Entwurf für ihre Implementierung und ihren lebenslangen Betrieb vorlegen – ein Entwurf, der den Rahmen des ursprünglichen Python-Beispiels weit übersteigt.
+
+Teil I: Der strategische Imperativ für eine souveräne PKI
+
+Dieser Teil legt unumstößlich dar, warum eine private CA für das VCC-Projekt nicht verhandelbar ist, indem er sie direkt mit den Grundprinzipien des Systems verknüpft.
+
+1.1 Identität schmieden in einer Zero-Trust-Welt: Die PKI als Immunsystem des VCC
+
+Die Sicherheitsarchitektur des VCC basiert explizit auf den Prinzipien von Zero-Trust: „Niemals vertrauen, immer überprüfen“.2 Diese Philosophie verwirft das veraltete, perimeterbasierte Sicherheitsmodell und geht stattdessen davon aus, dass Bedrohungen sowohl außerhalb als auch innerhalb des Netzwerks existieren können.4 Eine solche Überprüfung ist jedoch unmöglich ohne eine starke, vertrauenswürdige Identität. In einer verteilten Microservice-Architektur wie der des VCC – bestehend aus dem Orchestrator, zahlreichen Covina-Workern, der Clara-Engine, LLM-Servern und Datenbanken – stellt jede Service-zu-Service-Interaktion einen potenziellen Angriffsvektor dar.5 Folglich benötigt jede nicht-menschliche Komponente eine kryptographisch gesicherte, nicht fälschbare Identität.
+Eine private CA dient als die einzige, autoritative Wahrheitsquelle für die Ausstellung dieser Maschinenidentitäten in Form von X.509-Zertifikaten. Sie ist das grundlegende System, das es dem VCC-Ökosystem ermöglicht, zwischen legitimen, authentifizierten Diensten („selbst“) und potenziellen Eindringlingen („fremd“) zu unterscheiden und so die gesamte Zero-Trust-Philosophie funktionsfähig zu machen.7
+Diese Funktionsweise lässt sich am besten mit der eines biologischen Immunsystems vergleichen. Das VCC ist ein komplexer Organismus aus interagierenden Microservices.5 Sein Abwehrmechanismus ist Zero-Trust, was erfordert, dass jede Komponente vor jeder Interaktion ihre Identität nachweist.2 Diese Identität wird durch ein digitales Zertifikat bereitgestellt, das von einer vertrauenswürdigen Autorität ausgestellt wurde. Die private CA ist diese vertrauenswürdige Autorität und fungiert als zentrales Nervensystem für die Identitätsprüfung. Ähnlich wie ein Immunsystem, das Fremdkörper identifiziert und neutralisiert, bietet die PKI den Mechanismus für das VCC, jeden unauthentifizierten Kommunikationsversuch zu erkennen und abzuwehren. Dies verhindert die „Krankheit“ des unbefugten Zugriffs oder der lateralen Bewegung eines Angreifers im Netzwerk.
+
+1.2 Ein Anker der digitalen Souveränität: Kontrolle über das Vertrauensgefüge
+
+Ein wiederkehrendes Thema in der VCC-Dokumentation ist das strategische Ziel der digitalen Souveränität für die brandenburgische Verwaltung. Dies manifestiert sich in der Wahl einer On-Premise-Infrastruktur und der Verwendung von Open-Source-Komponenten wie Ollama, um die Abhängigkeit von externen Anbietern zu vermeiden und sicherzustellen, dass die Daten unter der Kontrolle des Landes bleiben.3 Sich für die Ausstellung
+interner Dienstidentitäten auf externe, kommerzielle CAs zu verlassen, würde diesem Prinzip direkt widersprechen. Es würde bedeuten, das Fundament des Systemvertrauens an einen Dritten auszulagern und so eine kritische Abhängigkeit und einen potenziellen Single Point of Failure außerhalb der Kontrolle der Verwaltung zu schaffen.
+Der Betrieb einer privaten CA holt das gesamte Vertrauensgefüge ins Haus. Die brandenburgische Verwaltung wird zu ihrem eigenen „Vertrauensanker“. Dies gewährleistet die vollständige Kontrolle über Ausgaberichtlinien, Sperrverfahren und die Sicherheit der Vertrauenswurzel und steht damit im Einklang mit den übergeordneten politischen und strategischen Zielen des Projekts.3
+Die Wahl des Vertrauensmodells spiegelt somit die Governance-Struktur wider. Die öffentliche Verwaltung in Deutschland ist hierarchisch aufgebaut, mit klaren Autoritäts- und Verantwortlichkeitslinien.1 Alternative Vertrauensmodelle wie das dezentrale „Web of Trust“ von PGP (Peer-to-Peer) oder das öffentliche Transparenzprotokoll von Sigstore (globales, öffentliches Gut) sind philosophisch inkompatibel mit dem Kontext des VCC.12 Ein Peer-to-Peer-Modell entbehrt einer zentralen Autorität, und ein öffentliches Modell schafft externe Abhängigkeiten – beides verletzt die Prinzipien der Souveränität und der hierarchischen Führung. Eine private, hierarchische PKI mit einer einzigen, ultimativen Vertrauenswurzel (der Offline-Root-CA) spiegelt die Struktur der öffentlichen Verwaltung perfekt wider. Sie etabliert eine klare, von oben nach unten gerichtete Befehlskette für das Vertrauen und macht die Architekturentscheidung zu einer digitalen Manifestation der Leitphilosophie der Organisation.
+
+1.3 Etablierung auditierbarer Vertrauensketten für die Compliance
+
+Das VCC wird als „Hochrisiko-KI-System“ gemäß dem EU AI Act klassifiziert.2 Dies führt zu strengen rechtlichen Verpflichtungen in Bezug auf Protokollierung, Transparenz, Robustheit und Cybersicherheit.1 Gleichzeitig erfordert die Verarbeitung von Bürgerdaten gemäß der DSGVO den nachweisbaren Beleg für „Datenschutz durch Technikgestaltung“ und „Sicherheit der Verarbeitung“.1
+Eine PKI liefert den auditierbaren kryptographischen Beweis, der zur Erfüllung dieser Anforderungen erforderlich ist. Jede von einem Dienst durchgeführte Aktion kann mit seiner zertifikatsbasierten Identität verknüpft werden. Sichere Kommunikationskanäle (über mTLS) und signierte Code-Artefakte erzeugen ein unveränderliches, überprüfbares Protokoll von Aktivitäten und bieten so einen definitiven Audit-Trail für Aufsichtsbehörden und Gerichte. Die eigenen Protokolle der CA über die Ausstellung und den Widerruf von Zertifikaten sind ein entscheidender Teil dieses Compliance-Nachweises.
+
+Teil II: Architektonische Integration und zentrale Sicherheitsfunktionen
+
+Dieser Teil geht vom „Warum“ zum „Wie“ über und beschreibt die spezifischen Rollen der PKI bei der Minderung der identifizierten Bedrohungen für das VCC.
+
+2.1 Absicherung des Service Mesh mit Mutual TLS (mTLS)
+
+Die VCC-Architektur besteht aus Dutzenden von kommunizierenden Komponenten: dem Saga-Orchestrator, dem UDS3 Backend Worker, verschiedenen Ingestion-Workern (File Scanner, DSGVO Worker), dem LLM Worker und den Datenbanken selbst.5 Jede Verbindung ist ein potenzieller Abhör- oder Angriffspunkt. Die VCC-Sicherheitsstrategie schreibt daher zwingend den Einsatz von Mutual TLS (mTLS) für die gesamte Service-zu-Service-Kommunikation vor, um laterale Bewegungen zu verhindern.2
+Im Gegensatz zum Standard-TLS, bei dem sich nur der Server authentifiziert, verlangt mTLS, dass sich sowohl der Client als auch der Server mit einem Zertifikat ausweisen und ihre Identität nachweisen, bevor eine Verbindung hergestellt wird.4 Dies schafft einen bidirektionalen, verschlüsselten und authentifizierten Kanal für jeden internen API-Aufruf. Die private CA ist dafür verantwortlich, jedem einzelnen Microservice ein einzigartiges Zertifikat auszustellen. Dieses Zertifikat wird zur nicht fälschbaren Identitätskarte des Dienstes und ermöglicht ihm die Teilnahme am mTLS-gesicherten Mesh. Ohne die CA ist mTLS in diesem Umfang nicht implementierbar. Dies verhindert direkt On-Path-, Spoofing- und Credential-Stuffing-Angriffe innerhalb des VCC-Netzwerks.7
+
+2.2 Gewährleistung der Code- und Modellintegrität: Abwehr von Supply-Chain-Angriffen
+
+Die VCC-Risikoanalyse hebt hochentwickelte Supply-Chain-Angriffe hervor, darunter „Backdoor-Angriffe“ und die Injektion von bösartigem Code in portable KI-Modellkomponenten wie LoRa/QLoRA-Adapter.1 Die „kaskadierende Integritätskompromittierung“ ist ein Paradebeispiel dafür, wie eine kompromittierte Komponente die Intelligenz des Systems dauerhaft korrumpieren kann.6
+Die Lösung besteht darin, alle kritischen Software-Artefakte digital zu signieren. Dies umfasst den Python-Quellcode der Worker, kompilierte Binärdateien und, was am wichtigsten ist, jeden einzelnen LoRa-Adapter, bevor er im Modell-Repository bereitgestellt wird.2 Gemäß bewährten Verfahren zielt der Signaturprozess nicht auf einzelne Dateien ab, sondern auf eine zentrale Manifestdatei (z.B.
+SHA256SUMS), die die kryptographischen Hashes aller Codedateien enthält. Das Signieren dieses einzigen Manifests schützt den Inhalt, den Namen und die Vollständigkeit des gesamten Code-Bundles vor Manipulation.16
+Der Query Router des VCC, der dynamisch LoRa-Adapter lädt, muss um eine „Just-in-Time“-Integritätsprüfung erweitert werden. Er muss die Signatur jedes Adapters kryptographisch überprüfen, unmittelbar bevor er ihn in den Speicher lädt. Dies mindert das Risiko, dass eine legitime Datei nach dem Systemstart durch eine bösartige ersetzt wird.6 Alle Signaturen müssen zudem von einer vertrauenswürdigen Zeitstempel-Autorität (Time Stamping Authority, TSA) mit einem Zeitstempel versehen werden. Dies stellt sicher, dass die Gültigkeit der Signatur auch nach Ablauf des Signaturzertifikats überprüft werden kann und bietet einen entscheidenden Zeitreferenzpunkt im Falle einer Schlüsselkompromittierung und des anschließenden Zertifikatswiderrufs.17 Die private CA wird die Vertrauenswurzel für ein dediziertes internes „Code Signing“-Zertifikat sein, das von der automatisierten CI/CD-Pipeline zum Signieren aller Artefakte verwendet wird und so eine überprüfbare Nachweiskette von der Entwicklung bis zur Bereitstellung schafft.
+Die Bedrohung der „kaskadierenden Integritätskompromittierung“ hebt die Bedeutung des Code-Signierens auf eine missionskritische Ebene. Die einzigartigste und gefährlichste Bedrohung für das VCC ist die Feedback-Schleife, die das KI-Modell (Clara) auf der Grundlage fehlerhafter Daten und Benutzervalidierung dauerhaft korrumpieren kann.6 Ein noch direkterer Angriffsvektor besteht darin, diese Schleife zu umgehen und direkt einen bösartigen, vortrainierten LoRa-Adapter einzuschleusen (ein Supply-Chain-Angriff).6 Die dynamische Ladefunktion dieser Adapter in der VCC-Architektur schafft eine „Just-in-Time“-Schwachstelle, bei der eine Datei nach dem Systemstart ausgetauscht werden könnte.6 Daher ist das kryptographische Signieren jedes Adapters und die Überprüfung dieser Signatur im Moment des Ladens die direkteste und robusteste Gegenmaßnahme. Dies verwandelt das Code-Signieren von einer allgemeinen Best Practice in eine spezifische, unverzichtbare architektonische Kontrolle, die eines der kritischsten identifizierten Risiken des VCC direkt mindert. Die private CA ist der Anker für diesen gesamten Integritätsprüfungsprozess.
+
+2.3 Verbesserung der Zugriffskontrolle für privilegierte Benutzer
+
+Obwohl nicht der Hauptfokus, kann die PKI erweitert werden, um Client-Zertifikate für menschliche Administratoren zur Verwaltung der VCC-Infrastruktur auszustellen. Diese Zertifikate können auf Hardware-Token (z.B. Smartcards oder YubiKeys) gespeichert werden und erfordern sowohl den Besitz des Tokens als auch eine PIN für den Zugriff. Dies bietet eine wesentlich stärkere Form der Multi-Faktor-Authentifizierung als Passwörter oder softwarebasierte Token für die privilegiertesten Konten.20
+
+Teil III: Ein hochsicherer Entwurf für Implementierung und Betrieb
+
+Dieser Teil bietet die präskriptive, umsetzbare Anleitung zur Implementierung einer produktionsreifen PKI und nutzt das Python-Skript des Benutzers als Ausgangspunkt für die Issuing CA.
+
+3.1 Die Zwei-Ebenen-CA-Hierarchie: Ein kompromissloser Standard
+
+Eine einzelne, universell einsetzbare CA, die mit dem Netzwerk verbunden ist, stellt einen katastrophalen Single Point of Failure dar. Bewährte Verfahren aus Industrie und Regierung schreiben einen mehrstufigen Ansatz vor, um die ultimative Vertrauenswurzel zu isolieren.21
+●	Ebene 1: Die Offline-Root-CA: Dies ist der ultimative Vertrauensanker für das gesamte VCC-Ökosystem. Ihr einziger Zweck ist es, die Zertifikate der Issuing CAs zu signieren und dann wieder offline genommen zu werden. Sie stellt niemals Zertifikate direkt für Endentitäten (Dienste oder Benutzer) aus.21
+●	Ebene 2: Die Online-Issuing-CA(s): Dies sind untergeordnete CAs, deren Zertifikate von der Root-CA signiert sind. Sie sind online und übernehmen die täglichen operativen Aufgaben der Ausstellung, Erneuerung und des Widerrufs von Zertifikaten für VCC-Dienste und das Code-Signieren. Mehrere Issuing CAs können für verschiedene Zwecke erstellt werden (z.B. eine für mTLS, eine für Code Signing), um eine Trennung der Aufgaben durchzusetzen.21
+Die folgende Tabelle verdeutlicht die unterschiedlichen Sicherheitsniveaus und Rollen der beiden Ebenen.
+Merkmal / Kontrolle	Offline Root CA (Ebene 1)	Online Issuing CA (Ebene 2)
+Primärer Zweck	Der ultimative Vertrauensanker. Signiert NUR Zertifikate von Issuing CAs.	Stellt Endentitätszertifikate (mTLS, Code Signing) aus, erneuert und widerruft sie.
+Netzwerkstatus	Streng Offline / Air-Gapped. Nur für Signaturzeremonien eingeschaltet.	Online. Für automatisierte Operationen im internen VCC-Netzwerk erreichbar.
+Speicherung des privaten Schlüssels	Zwingend: FIPS 140-2 Level 3+ HSM (nicht exportierbarer Schlüssel).	Empfohlen: HSM oder ein sicherer, verschlüsselter Software-Tresor mit starken Zugriffskontrollen.
+Schlüsselzugriffsrichtlinie	Mehr-Personen-Kontrolle (Quorum) im Rahmen einer formellen Schlüsselzeremonie erforderlich.	Rollenbasierte Zugriffskontrolle (RBAC) für autorisierte Administratoren und automatisierte Systeme.
+Zertifikatsgültigkeit	Langfristig (z.B. 20 Jahre).	Mittelfristig (z.B. 10 Jahre).
+Sperrinformationen	Veröffentlicht selten eine Zertifikatssperrliste (CRL).	Veröffentlicht häufig CRLs und/oder unterstützt einen OCSP-Responder.
+Betriebsskript	Manuelle, skriptgesteuerte Verfahren, die während einer Zeremonie ausgeführt werden.	Automatisierte Skripte (z.B. erweitertes Python-Skript), die in VCC-Systeme integriert sind.
+
+3.2 Sicherung der Kronjuwelen: Die Offline-Root-CA
+
+Die Sicherheit des privaten Schlüssels der Root-CA ist von größter Bedeutung. Eine Kompromittierung dieses Schlüssels macht die gesamte PKI ungültig. Die folgenden Kontrollen sind zwingend, nicht optional.
+●	Hardware Security Module (HSM): Der private Schlüssel der Root-CA muss ausschließlich in einem nach FIPS 140-2 Level 3 (oder höher) zertifizierten HSM generiert, gespeichert und verwendet werden. Der Schlüssel muss als nicht exportierbar konfiguriert sein, was es einem Angreifer oder sogar einem abtrünnigen Administrator physisch unmöglich macht, den Klartextschlüssel zu extrahieren.20
+●	Physische und logische Isolation: Der Root-CA-Server muss eine dedizierte, gehärtete physische Maschine sein, die an einem sicheren, physisch kontrollierten Ort (z.B. einem Tresor) aufbewahrt wird. Er muss dauerhaft von allen Netzwerken getrennt sein („air-gapped“), außer während der kurzen, kontrollierten Momente einer Signaturzeremonie.22
+●	Die Schlüssel-Signaturzeremonie: Die Erzeugung des Root-Schlüssels und das Signieren der Issuing-CA-Zertifikate müssen als formelle, skriptgesteuerte und dokumentierte „Schlüsselzeremonie“ durchgeführt werden. Dies erfordert mehrere vertrauenswürdige Personen (Schlüsselhalter) mit getrennten Rollen, rechtlicher Vertretung und Zeugen, um Transparenz zu gewährleisten und einseitige böswillige Handlungen zu verhindern.22
+
+3.3 Operationalisierung der Issuing CA: Eine erweiterte Python-Implementierung
+
+Das vom Benutzer bereitgestellte Python-Skript ist eine hervorragende Grundlage für die Issuing CA. Dieser Abschnitt beschreibt die notwendigen Erweiterungen für den produktiven Einsatz.
+●	Robuster Schlüsselschutz: Die Zeile encryption_algorithm=serialization.NoEncryption() muss ersetzt werden. Der private Schlüssel der Issuing CA muss mit einer starken, passwortbasierten Verschlüsselung unter Verwendung von serialization.BestAvailableEncryption(b'sehr-starkes-passwort') geschützt werden. Dieses Passwort muss sicher verwaltet werden, beispielsweise in einem dedizierten Geheimnisverwaltungssystem wie HashiCorp Vault.
+●	Konfigurationsmanagement: Hartcodierte Werte (z.B. Namen, Gültigkeitsdauern) müssen in eine Konfigurationsdatei (z.B. YAML oder JSON) ausgelagert werden, um eine flexible und auditierbare Richtlinienverwaltung ohne Codeänderungen zu ermöglichen.
+●	Fehlerbehandlung und Protokollierung: Implementieren Sie umfassende try-except-Blöcke für alle Datei-I/O- und kryptographischen Operationen. Alle Ausstellungs- und Signaturaktivitäten müssen in einem sicheren, zentralisierten Protokollierungssystem (z.B. einem SIEM) protokolliert werden, um einen vollständigen Audit-Trail zu gewährleisten.
+●	Integration mit Certificate Signing Requests (CSRs): Das Skript sollte so modifiziert werden, dass es von VCC-Diensten generierte CSRs verarbeitet, anstatt den Dienstschlüssel selbst zu erzeugen. Dies entspricht dem Prinzip, dass die Entität, die das Zertifikat anfordert, ihr eigenes Schlüsselpaar generieren sollte.
+
+3.4 Robustes Lebenszyklusmanagement
+
+●	Zertifikatsrichtlinien: Definieren und dokumentieren Sie klare Richtlinien für die Gültigkeitsdauer von Zertifikaten. Root-CA-Zertifikate sollten eine lange Lebensdauer haben (z.B. 20 Jahre), Issuing CAs eine mittlere (z.B. 10 Jahre) und Endentitätszertifikate für Dienste sollten kurzlebig sein (z.B. 1 Jahr oder weniger), um das Zeitfenster bei einer Kompromittierung zu begrenzen.22
+●	Automatisierte Erneuerung: Implementieren Sie automatisierte Prozesse zur Erneuerung von Dienstzertifikaten vor deren Ablauf, um Dienstausfälle zu vermeiden.
+●	Widerrufsmechanismen: Die PKI muss einen robusten und zeitnahen Zertifikatswiderruf unterstützen. Dies beinhaltet die Veröffentlichung einer Zertifikatssperrliste (CRL) und potenziell die Einrichtung eines Online Certificate Status Protocol (OCSP)-Responders. Alle VCC-Dienste müssen so konfiguriert sein, dass sie den Sperrstatus von Zertifikaten während des mTLS-Handshakes überprüfen.4
+
+Schlussfolgerung: Die CA als Fundament des digitalen Vertrauens in der öffentlichen Verwaltung
+
+Dieser Bericht hat gezeigt, dass eine souveräne, private PKI nicht nur eine technische Komponente, sondern das strategische Fundament für die Sicherheit und Vertrauenswürdigkeit des VCC ist. Sie ist die Basistechnologie für die vorgeschriebene Zero-Trust-Architektur, der Garant für die digitale Souveränität und der Lieferant von auditierbaren Nachweisen für die Einhaltung gesetzlicher Vorschriften.
+Der Weg nach vorn erfordert die Ablehnung vereinfachender, einstufiger Implementierungen und die Annahme des hier beschriebenen hochsicheren, zweistufigen Modells. Das bereitgestellte Python-Skript dient als wertvoller Ausgangspunkt für die operative Issuing CA, aber nur, wenn es Teil dieses umfassenderen, gehärteten Rahmens ist, der durch eine kryptographisch und physisch gesicherte Offline-Root-CA verankert ist. Mit dieser Investition baut die brandenburgische Verwaltung das VCC-Ökosystem auf einem Fundament kryptographischer Wahrheit auf und sichert so seine Integrität und das Vertrauen seiner Nutzer und Bürger für die kommenden Jahre.
+Referenzen
+1.	EU AI Act und DSGVO Konformitätsstrategie
+2.	Gesamtstrategie: Sicherheit und Compliance für KI-Systeme
+3.	Visual Processing Backbone (VPB) - KI-Integration in Brandenburgs Verwaltung
+4.	Understanding mTLS and Its Role in Zero Trust Security - EJBCA, Zugriff am Oktober 1, 2025, https://www.ejbca.org/resources/understanding-mtls-and-its-role-in-zero-trust-security/
+5.	Covina Architektur
+6.	Clara Strategieanalyse und Einordnung
+7.	What is mTLS? | Mutual TLS | Cloudflare, Zugriff am Oktober 1, 2025, https://www.cloudflare.com/learning/access-management/what-is-mutual-tls/
+8.	How to Implement mTLS in Microservices and Zero Trust Architectures - GoCodeo, Zugriff am Oktober 1, 2025, https://www.gocodeo.com/post/how-to-implement-mtls-in-microservices-and-zero-trust-architectures
+9.	Zero trust, mTLS, and the service mesh explained - Buoyant.io, Zugriff am Oktober 1, 2025, https://www.buoyant.io/blog/zero-trust-mtls-and-the-service-mesh-explained
+10.	KI-System für Verwaltungsrecht analysiert
+11.	KI-Ethik: Human-in-the-Loop, Brandenburg
+12.	Web of trust - Wikipedia, Zugriff am Oktober 1, 2025, https://en.wikipedia.org/wiki/Web_of_trust
+13.	Web of Trust: decentralized trust model - negg Blog, Zugriff am Oktober 1, 2025, https://negg.blog/en/web-of-trust-decentralized-trust-model/
+14.	Model authenticity and transparency with Sigstore - Red Hat ..., Zugriff am Oktober 1, 2025, https://next.redhat.com/2025/04/10/model-authenticity-and-transparency-with-sigstore/
+15.	Veritas im Kontext: Eine wissenschaftliche, gesellschaftliche und technische Analyse
+16.	Python Code Integrität und Manipulationsschutz
+17.	Code Signing Best Practices - GlobalSign Support, Zugriff am Oktober 1, 2025, https://support.globalsign.com/code-signing/general-information/code-signing-best-practices
+18.	Best Practices for Timestamping | DigiCert.com, Zugriff am Oktober 1, 2025, https://www.digicert.com/blog/best-practices-timestamping
+19.	Code Signing Best Practices - Entrust, Zugriff am Oktober 1, 2025, https://www.entrust.com/sites/default/files/documentation/whitepapers/code-signing-best-practices-v2.pdf
+20.	Components of a PKI, Part 5: Hardware Security Modules - Ravenswood Technology Group, Zugriff am Oktober 1, 2025, https://www.ravenswoodtechnology.com/components-of-a-pki-part-5-hardware-security-modules/
+21.	AWS Private CA best practices, Zugriff am Oktober 1, 2025, https://docs.aws.amazon.com/privateca/latest/userguide/ca-best-practices.html
+22.	Offline certification authority best practices - Entrust, Zugriff am Oktober 1, 2025, https://www.entrust.com/sites/default/files/documentation/whitepapers/offline-ca-best-practices-wp.pdf
+23.	Best practices for Certificate Authority Service | Google Cloud, Zugriff am Oktober 1, 2025, https://cloud.google.com/certificate-authority-service/docs/best-practices
+24.	Best Practices For PKI Management - AppViewX, Zugriff am Oktober 1, 2025, https://www.appviewx.com/blogs/best-practices-for-pki-management/

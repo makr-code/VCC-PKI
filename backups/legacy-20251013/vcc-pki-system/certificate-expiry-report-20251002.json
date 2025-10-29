@@ -1,0 +1,52 @@
+{
+  "generated_at": "2025-10-02T09:36:03.754692",
+  "summary": {
+    "expiring_in_7_days": 0,
+    "expiring_in_30_days": 0,
+    "expiring_in_90_days": 0,
+    "expiring_in_180_days": 1,
+    "expiring_in_365_days": 2,
+    "by_status": {
+      "expiring": 1,
+      "revoked": 1,
+      "valid": 2
+    },
+    "total_certificates": 4
+  },
+  "details": {
+    "expiring_in_7_days": [],
+    "expiring_in_30_days": [],
+    "expiring_in_90_days": [],
+    "expiring_in_180_days": [
+      {
+        "id": 2,
+        "subject": "CN=service-auth.vcc.local",
+        "serial_number": "1002",
+        "status": "valid",
+        "expires_at": "2026-03-31 09:35:18.240412",
+        "days_until_expiry": 179,
+        "urgency": "warning"
+      }
+    ],
+    "expiring_in_365_days": [
+      {
+        "id": 2,
+        "subject": "CN=service-auth.vcc.local",
+        "serial_number": "1002",
+        "status": "valid",
+        "expires_at": "2026-03-31 09:35:18.240412",
+        "days_until_expiry": 179,
+        "urgency": "warning"
+      },
+      {
+        "id": 1,
+        "subject": "CN=web-portal.brandenburg.de",
+        "serial_number": "1001",
+        "status": "valid",
+        "expires_at": "2026-10-02 09:35:18.240389",
+        "days_until_expiry": 364,
+        "urgency": "warning"
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+# PKI Admin CLI - Optional Dependencies
+
+# Color output support (cross-platform)
+colorama>=0.4.6
+
+# Table formatting
+tabulate>=0.9.0

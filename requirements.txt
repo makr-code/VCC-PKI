@@ -1,0 +1,5 @@
+cryptography>=41.0.0
+sigstore>=2.0.0
+tuf>=3.0.0
+click>=8.1.0
+pyyaml>=6.0

@@ -1,0 +1,94 @@
+{
+  "veritas-backend": {
+    "certificate_id": "cert_veritas-backend_20251013_155844",
+    "service_id": "veritas-backend",
+    "common_name": "veritas-backend.vcc.local",
+    "serial_number": "273043850637616436189921058267755906311470697859",
+    "fingerprint_sha256": "eb4837b6cc2b90284fc61e0b866eb7bbce80a79e9a03ad5c9d6848e0fa0b097f",
+    "not_before": "2025-10-13T15:58:44.340825+00:00",
+    "not_after": "2026-10-13T15:58:44.340825+00:00",
+    "issuer": "VCC Intermediate CA",
+    "status": "active",
+    "cert_file": "service_certificates\\veritas-backend\\cert.pem",
+    "key_file": "service_certificates\\veritas-backend\\key.pem",
+    "san_dns": [
+      "veritas-backend",
+      "localhost"
+    ],
+    "san_ip": [
+      "127.0.0.1",
+      "192.168.178.94"
+    ],
+    "metadata": {},
+    "created_at": "2025-10-13T15:58:44.350353+00:00"
+  },
+  "covina-backend": {
+    "certificate_id": "cert_covina-backend_20251013_155853",
+    "service_id": "covina-backend",
+    "common_name": "covina-backend.vcc.local",
+    "serial_number": "328725455222740260292561252901865618487402547254",
+    "fingerprint_sha256": "3b78c47c461d47416b41c8f36ba003877b4f6f9f284c70d7a8abc2c6347672c3",
+    "not_before": "2025-10-13T15:58:53.639832+00:00",
+    "not_after": "2026-10-13T15:58:53.639832+00:00",
+    "issuer": "VCC Intermediate CA",
+    "status": "active",
+    "cert_file": "service_certificates\\covina-backend\\cert.pem",
+    "key_file": "service_certificates\\covina-backend\\key.pem",
+    "san_dns": [
+      "covina-backend",
+      "localhost"
+    ],
+    "san_ip": [
+      "127.0.0.1",
+      "192.168.178.94"
+    ],
+    "metadata": {},
+    "created_at": "2025-10-13T15:58:53.646518+00:00"
+  },
+  "covina-ingestion": {
+    "certificate_id": "cert_covina-ingestion_20251013_155906",
+    "service_id": "covina-ingestion",
+    "common_name": "covina-ingestion.vcc.local",
+    "serial_number": "262352875837908558454766178215784836505473923482",
+    "fingerprint_sha256": "38fa249364b9bff48f1765f6081909485579b983d87740cebcf163f698508d26",
+    "not_before": "2025-10-13T15:59:06.102082+00:00",
+    "not_after": "2026-10-13T15:59:06.102082+00:00",
+    "issuer": "VCC Intermediate CA",
+    "status": "active",
+    "cert_file": "service_certificates\\covina-ingestion\\cert.pem",
+    "key_file": "service_certificates\\covina-ingestion\\key.pem",
+    "san_dns": [
+      "covina-ingestion",
+      "localhost"
+    ],
+    "san_ip": [
+      "127.0.0.1",
+      "192.168.178.94"
+    ],
+    "metadata": {},
+    "created_at": "2025-10-13T15:59:06.109513+00:00"
+  },
+  "pki-server": {
+    "certificate_id": "cert_pki-server_20251013_161133",
+    "service_id": "pki-server",
+    "common_name": "pki-server.vcc.local",
+    "serial_number": "525398053928257917705848566651941684973970306427",
+    "fingerprint_sha256": "c3fce10e93161c2fe778801bea1faafbfc988d5a6f630e9d1b44d629a5ab8580",
+    "not_before": "2025-10-13T16:11:33.131502+00:00",
+    "not_after": "2026-10-13T16:11:33.131502+00:00",
+    "issuer": "VCC Intermediate CA",
+    "status": "active",
+    "cert_file": "service_certificates\\pki-server\\cert.pem",
+    "key_file": "service_certificates\\pki-server\\key.pem",
+    "san_dns": [
+      "pki-server",
+      "localhost"
+    ],
+    "san_ip": [
+      "127.0.0.1",
+      "192.168.178.94"
+    ],
+    "metadata": {},
+    "created_at": "2025-10-13T16:11:33.137679+00:00"
+  }
+}
