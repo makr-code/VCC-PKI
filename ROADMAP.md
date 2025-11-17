@@ -72,4 +72,4 @@ Feature-Anfragen bitte als Issue erstellen mit dem Label `enhancement`.
 
 ---
 
-*Letzte Aktualisierung: 29.10.2025*
+*Letzte Aktualisierung: 17.11.2025*

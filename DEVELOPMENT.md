@@ -186,4 +186,4 @@ docker-compose -f docker-compose.vcc.yml logs -f pki-server
 
 ---
 
-*Letzte Aktualisierung: 29.10.2025*
+*Letzte Aktualisierung: 17.11.2025*

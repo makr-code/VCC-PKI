@@ -112,4 +112,4 @@ Private Repository - Alle Rechte vorbehalten
 
 ---
 
-*Letzte Aktualisierung: 29.10.2025*
+*Letzte Aktualisierung: 17.11.2025*
