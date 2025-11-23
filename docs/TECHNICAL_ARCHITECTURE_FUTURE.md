@@ -617,7 +617,8 @@ service_communication_policies:
 ```python
 # PKCS#11 HSM Integration
 
-from pkcs11 import lib, Session, KeyType, ObjectClass, Mechanism
+from pkcs11 import lib, KeyType, ObjectClass, Mechanism
+from pkcs11.mechanisms import KeyCapability
 
 class HSMCryptoProvider:
     """HSM-based cryptographic operations for CA keys"""
@@ -640,7 +641,7 @@ class HSMCryptoProvider:
             key_size,
             label=key_label,
             store=True,
-            capabilities=KeyCapabilities.SIGN | KeyCapabilities.VERIFY
+            capabilities=KeyCapability.SIGN | KeyCapability.VERIFY
         )
         
         return public_key, private_key
