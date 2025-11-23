@@ -56,14 +56,28 @@ python scripts/bulk_sign_gui.py
 
 ## 📚 Dokumentation
 
+### Strategie & Architektur
+- **[VCC-PKI Weiterentwicklungsstrategie](VCC_PKI_WEITERENTWICKLUNGSSTRATEGIE.md)** - Umfassende Entwicklungsstrategie 2026-2028
+- **[Future Technical Architecture](docs/TECHNICAL_ARCHITECTURE_FUTURE.md)** - Detaillierte technische Architektur-Spezifikationen
+
+### Projekt-Management
 - [ROADMAP.md](ROADMAP.md) - Entwicklungsplan
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) - Aktueller Projektstatus
+- [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) - Detaillierte Implementierungs-Roadmap
+
+### Entwicklung & Integration
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Entwickler-Guide
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Beitragsrichtlinien
+- [INTEGRATION_QUICK_START.md](INTEGRATION_QUICK_START.md) - Schnellstart für Service-Integration
+- [SERVICE_INTEGRATION_TODO.md](SERVICE_INTEGRATION_TODO.md) - Service-Integrations-Checkliste
+
+### Technische Dokumentation
 - [docs/](docs/) - Detaillierte Dokumentation
   - [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
   - [CODE_SIGNING.md](docs/CODE_SIGNING.md)
   - [PKI_ADMIN_CLI.md](docs/PKI_ADMIN_CLI.md)
   - [PRE_COMMIT_HOOK_GUIDE.md](docs/PRE_COMMIT_HOOK_GUIDE.md)
+  - [PKI_PROJECT_COMPLETE.md](docs/PKI_PROJECT_COMPLETE.md)
 
 ## 🔐 CA-Hierarchie
 
@@ -110,6 +124,19 @@ Private Repository - Alle Rechte vorbehalten
 
 **makr-code** - [GitHub](https://github.com/makr-code)
 
+## 🎯 Zukunftsvision
+
+VCC-PKI entwickelt sich zu einer **Enterprise-Grade PKI-Infrastruktur** mit:
+
+- ✅ **Vollautomatisierung** - 100% automatisches Certificate Lifecycle Management
+- ✅ **Multi-Organization Support** - Skalierbar für Brandenburg + Partner-Verwaltungen
+- ✅ **Cloud-Native** - Kubernetes-ready, Container-optimiert
+- ✅ **HSM-Integration** - Hardware-basierte Schlüsselsicherheit
+- ✅ **Compliance-Excellence** - DSGVO, EU AI Act, BSI Standards
+- ✅ **Zero-Trust Architecture** - mTLS für alle VCC-Services
+
+Mehr Details in der [Weiterentwicklungsstrategie](VCC_PKI_WEITERENTWICKLUNGSSTRATEGIE.md).
+
 ---
 
-*Letzte Aktualisierung: 29.10.2025*
+*Letzte Aktualisierung: 23.11.2025*
