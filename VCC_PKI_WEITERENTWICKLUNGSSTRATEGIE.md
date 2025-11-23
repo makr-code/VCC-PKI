@@ -14,12 +14,12 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 
 ### Strategische Ziele
 
-1. **VCC-Ecosystem Integration**: Nahtlose Integration in alle VCC-Services (Argus, Covina, Clara, Veritas, VPB)
-2. **Zero-Trust Architecture**: Vollständige Umsetzung von Zero-Trust-Prinzipien
-3. **Automatisierung**: Minimierung manueller Eingriffe durch intelligente Automatisierung
-4. **Skalierbarkeit**: Vorbereitung für Multi-Tenant und Cross-Organization Support
-5. **Compliance**: Erfüllung von DSGVO, EU AI Act und BSI-Standards
-6. **Future-Ready**: Vorbereitung auf Cloud-native, Kubernetes und moderne Deployment-Szenarien
+1. **Digitale Souveränität**: On-Premise-Betrieb, keine Vendor-Abhängigkeiten, vollständige Kontrolle
+2. **VCC-Ecosystem Integration**: Nahtlose Integration in alle VCC-Services (Argus, Covina, Clara, Veritas, VPB)
+3. **Zero-Trust Architecture**: Vollständige Umsetzung von Zero-Trust-Prinzipien
+4. **Automatisierung**: Minimierung manueller Eingriffe durch intelligente Automatisierung
+5. **Skalierbarkeit**: Vorbereitung für Multi-Tenant und Cross-Organization Support
+6. **Compliance**: Erfüllung von DSGVO, EU AI Act und BSI-Standards
 
 ---
 
@@ -33,7 +33,8 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 
 - **Vollautomatisierung**: 100% automatische Certificate Lifecycle Management
 - **Multi-Organization**: Support für 10+ Verwaltungsorganisationen
-- **Cloud-Native**: Kubernetes-ready, Container-optimiert
+- **On-Premise First**: Primär On-Premise-Deployment, Kubernetes-ready für eigene Infrastruktur
+- **Vendor-Unabhängigkeit**: Keine externen Authentifizierungs- oder CA-Services erforderlich
 - **KI-Integration**: Automatische Anomalie-Erkennung und Security-Optimierung
 - **Compliance-Excellence**: Vollständige Erfüllung aller relevanten Standards
 - **Developer-First**: 5-Minuten-Integration für neue Services
@@ -80,7 +81,7 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 - **Advanced Monitoring**: Prometheus/Grafana Integration
 - **High Availability**: Multi-Instance Setup
 - **Kubernetes Integration**: Cloud-native Deployment
-- **External CA Integration**: Let's Encrypt, DigiCert
+- **External CA Integration**: Let's Encrypt, DigiCert (optional für spezielle Anwendungsfälle)
 - **SCEP/EST**: Automatische Enrollment-Protokolle
 - **Web Dashboard**: Moderne UI für Administration
 
@@ -329,36 +330,39 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 
 ---
 
-### Phase 3: Cloud-Native & Kubernetes (Q3 2026)
+### Phase 3: On-Premise Kubernetes & High Availability (Q3 2026)
 **Dauer:** 3 Monate  
-**Fokus:** Cloud-Readiness und moderne Deployment
+**Fokus:** On-Premise Kubernetes-Deployment und Hochverfügbarkeit
 
-#### 3.1 Kubernetes-Native Deployment (Prio: HOCH)
-**Ziel:** Cloud-native PKI für Kubernetes
+#### 3.1 On-Premise Kubernetes-Deployment (Prio: HOCH)
+**Ziel:** Kubernetes-basiertes Deployment für eigene On-Premise-Infrastruktur
+
+**Hinweis:** Deployment ausschließlich auf **eigener On-Premise-Infrastruktur** (z.B. Brandenburg Rechenzentrum). Keine Cloud-Provider-Abhängigkeiten.
 
 **Aufgaben:**
-- [ ] **Helm Charts**
+- [ ] **Helm Charts für On-Premise**
   - PKI Server Helm Chart
   - Dependency Management (PostgreSQL, Redis)
-  - ConfigMaps & Secrets Management
+  - ConfigMaps & Secrets Management (keine externen Secrets-Manager)
 
 - [ ] **cert-manager Integration**
   - Custom Issuer für VCC-PKI
   - Automatic Certificate Provisioning
   - Certificate CRDs
 
-- [ ] **Service Mesh Integration**
-  - Istio/Linkerd Integration
+- [ ] **Service Mesh Integration (Optional)**
+  - Istio/Linkerd Integration (on-premise)
   - Automatic mTLS Certificate Injection
   - Certificate Rotation ohne Downtime
 
 **Deliverables:**
-- Production-ready Helm Charts
+- Production-ready Helm Charts für On-Premise
 - cert-manager Integration
-- Service Mesh Support
+- Service Mesh Support (optional)
 
 **Aufwand:** 4 Wochen  
-**Tech:** Kubernetes, Helm, cert-manager
+**Tech:** Kubernetes (On-Premise), Helm, cert-manager  
+**Infrastruktur:** Eigene On-Premise Kubernetes-Cluster (z.B. Brandenburg RZ)
 
 ---
 
@@ -371,9 +375,9 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
   - Shared State (PostgreSQL, Redis)
   - Health Checks & Auto-Scaling
 
-- [ ] **Geographic Redundancy**
-  - Multi-Region Deployment
-  - Cross-Region Replication
+- [ ] **Geographic Redundancy (On-Premise)**
+  - Multi-Site Deployment (eigene Rechenzentren)
+  - Cross-Site Replication
   - Failover Automation
 
 - [ ] **Disaster Recovery**
@@ -524,32 +528,35 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 **Dauer:** 3 Monate  
 **Fokus:** External Integration und Ecosystem
 
-#### 5.1 External CA Integration (Prio: MITTEL)
-**Ziel:** Integration mit externen CAs
+#### 5.1 External CA Integration (Prio: NIEDRIG, OPTIONAL)
+**Ziel:** Optional: Integration mit externen CAs für spezielle Anwendungsfälle
+
+**Hinweis:** Diese Integration ist **optional** und nur für spezielle Anwendungsfälle relevant (z.B. öffentliche Websites). Die primäre VCC-PKI funktioniert vollständig **eigenständig und on-premise** ohne externe CA-Abhängigkeiten.
 
 **Aufgaben:**
-- [ ] **Let's Encrypt Integration**
+- [ ] **Let's Encrypt Integration (Optional)**
   - ACME Protocol Support (RFC 8555)
-  - Automatic Public Certificate Provisioning
+  - Automatic Public Certificate Provisioning (nur für öffentliche Websites)
   - Challenge-Response Handling
 
-- [ ] **DigiCert / GlobalSign Integration**
-  - Commercial CA Integration
-  - EV Certificate Support
-  - Document Signing Certificates
+- [ ] **Commercial CA Integration (Optional)**
+  - Commercial CA Connectors (nur bei Bedarf)
+  - EV Certificate Support (nur für öffentliche Websites)
+  - Document Signing Certificates (falls extern erforderlich)
 
-- [ ] **CA Federation**
+- [ ] **CA Federation (Optional)**
   - Cross-CA Trust Chains
   - External CA Validation
   - Certificate Path Building
 
 **Deliverables:**
-- ACME Client Integration
-- Commercial CA Connectors
-- Federated Trust Architecture
+- Optional: ACME Client Integration
+- Optional: Commercial CA Connectors
+- Optional: Federated Trust Architecture
 
 **Aufwand:** 3-4 Wochen  
-**Standards:** RFC 8555 (ACME)
+**Standards:** RFC 8555 (ACME)  
+**Wichtig:** Vollständig optional - VCC-PKI ist eigenständig und on-premise betrieben
 
 ---
 
@@ -611,6 +618,26 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 
 ## 🏗️ Architektur-Evolution
 
+### Grundprinzipien
+
+**🔒 On-Premise First:**
+- Primäres Deployment auf **eigener Infrastruktur** (Brandenburg Rechenzentrum)
+- Keine Cloud-Provider-Abhängigkeiten (AWS, Azure, GCP)
+- Vollständige Datensouveränität und Kontrolle
+
+**🚫 Keine Vendor-Abhängigkeiten:**
+- Keine externen Authentifizierungsdienste erforderlich
+- Keine kommerzielle CA-Integration notwendig
+- Keine externen Secrets-Manager (z.B. HashiCorp Vault Cloud)
+- Open-Source-First: Bevorzugung von Open-Source-Komponenten
+
+**✅ Digitale Souveränität:**
+- Vollständige Kontrolle über alle Schlüssel und Zertifikate
+- Keine Datenübertragung an externe Dienste
+- Compliance mit deutschen und europäischen Datenschutzvorschriften
+
+---
+
 ### Von Monolith zu Microservices (Optional)
 
 #### Current Architecture (Monolithic)
@@ -652,15 +679,15 @@ Das VCC-PKI System ist eine zentrale Komponente der VCC-Architektur und bildet d
 - **Crypto:** Python `cryptography` library
 - **Deployment:** Docker, docker-compose
 
-#### Target Stack (2027)
+#### Target Stack (2027) - On-Premise
 - **Backend:** Python 3.12+, FastAPI 0.115+
-- **Database:** PostgreSQL 16+ (HA Cluster)
-- **Cache:** Redis 7+
-- **Crypto:** Python `cryptography` 43+ mit HSM Support
-- **Deployment:** Kubernetes (Helm), ArgoCD
-- **Monitoring:** Prometheus, Grafana, OpenTelemetry
-- **Service Mesh:** Istio/Linkerd
-- **Security:** Vault für Secrets, HSM für Keys
+- **Database:** PostgreSQL 16+ (HA Cluster, on-premise)
+- **Cache:** Redis 7+ (on-premise)
+- **Crypto:** Python `cryptography` 43+ mit HSM Support (on-premise HSM)
+- **Deployment:** Kubernetes (On-Premise), Helm, ArgoCD
+- **Monitoring:** Prometheus, Grafana, OpenTelemetry (on-premise)
+- **Service Mesh:** Istio/Linkerd (optional, on-premise)
+- **Secrets:** Kubernetes Secrets + HSM (keine externen Dienste)
 
 ---
 

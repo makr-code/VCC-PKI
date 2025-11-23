@@ -94,12 +94,12 @@ Dieses Dokument ergänzt die [VCC-PKI Weiterentwicklungsstrategie](../VCC_PKI_WE
 └─────────────────────────────────────┘
 ```
 
-### Target Architecture Phase 3 (Q3 2026) - Cloud-Native Microservices
+### Target Architecture Phase 3 (Q3 2026) - On-Premise Kubernetes Microservices
 
 ```
-                    Kubernetes Cluster
+                    On-Premise Kubernetes Cluster
 ┌──────────────────────────────────────────────────────────┐
-│                                                          │
+│                    Brandenburg Rechenzentrum             │
 │  ┌────────────────────────────────────────────────┐     │
 │  │          Ingress Controller (nginx)            │     │
 │  │     cert-manager.io (Automatic Cert Mgmt)      │     │
@@ -108,7 +108,7 @@ Dieses Dokument ergänzt die [VCC-PKI Weiterentwicklungsstrategie](../VCC_PKI_WE
 │  ┌───────────────────┴────────────────────────┐         │
 │  │           API Gateway (Kong/Istio)         │         │
 │  │  - Rate Limiting                           │         │
-│  │  - Authentication                          │         │
+│  │  - Authentication (keine Vendor-Login)     │         │
 │  │  - Request Routing                         │         │
 │  └───────┬──────────────────────┬─────────────┘         │
 │          │                      │                        │
@@ -142,17 +142,20 @@ Dieses Dokument ergänzt die [VCC-PKI Weiterentwicklungsstrategie](../VCC_PKI_WE
 │  └──────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
 
-External Dependencies:
+On-Premise Infrastructure (Eigene RZ):
 ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────┐
-│ PostgreSQL (RDS)    │  │   Redis (ElastiCache)│  │  Vault       │
-│ Multi-AZ HA         │  │   Cluster Mode       │  │  (Secrets)   │
+│ PostgreSQL (HA)     │  │   Redis (Cluster)   │  │  HSM         │
+│ On-Premise          │  │   On-Premise        │  │  (Hardware)  │
 └─────────────────────┘  └─────────────────────┘  └──────────────┘
 
-Observability Stack:
+Observability Stack (On-Premise):
 ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────┐
 │ Prometheus          │  │   Grafana           │  │  Jaeger      │
 │ (Metrics)           │  │   (Dashboards)      │  │  (Tracing)   │
 └─────────────────────┘  └─────────────────────┘  └──────────────┘
+
+Hinweis: Alle Komponenten laufen auf eigener On-Premise-Infrastruktur.
+         Keine Cloud-Provider (AWS/Azure/GCP), keine Vendor-Login erforderlich.
 ```
 
 ---
@@ -1325,19 +1328,22 @@ async def test_multi_org_isolation():
 
 Dieses Dokument definiert die technische Architektur für die Weiterentwicklung von VCC-PKI mit:
 
-- **Moderne Datenbank-Architektur** mit PostgreSQL, Multi-Tenant Support
-- **Cloud-Native Deployment** auf Kubernetes mit Helm
-- **HSM-Integration** für höchste Schlüsselsicherheit
-- **Umfassende Observability** mit Prometheus, Grafana, OpenTelemetry
+- **On-Premise First**: Primäres Deployment auf eigener Infrastruktur (Brandenburg RZ)
+- **Vendor-Unabhängigkeit**: Keine externen Authentifizierungs- oder CA-Services erforderlich
+- **Moderne Datenbank-Architektur** mit PostgreSQL, Multi-Tenant Support (on-premise)
+- **Kubernetes Deployment** auf eigener On-Premise-Infrastruktur mit Helm
+- **HSM-Integration** für höchste Schlüsselsicherheit (on-premise HSM)
+- **Umfassende Observability** mit Prometheus, Grafana, OpenTelemetry (on-premise)
 - **Skalierbare Microservices-Architektur** für zukünftiges Wachstum
 - **Robuste CI/CD-Pipeline** mit GitOps und automatisierten Tests
 
 Die Architektur ist designed für:
-- ✅ 99.99% Verfügbarkeit
-- ✅ Horizontale Skalierung
+- ✅ 99.99% Verfügbarkeit (on-premise)
+- ✅ Horizontale Skalierung (on-premise)
 - ✅ Multi-Tenant/Multi-Organization Support
 - ✅ Enterprise-Grade Security
 - ✅ Compliance-Readiness (DSGVO, EU AI Act, BSI)
+- ✅ Digitale Souveränität (vollständige Kontrolle)
 
 ---
 

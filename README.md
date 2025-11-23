@@ -128,10 +128,11 @@ Private Repository - Alle Rechte vorbehalten
 
 VCC-PKI entwickelt sich zu einer **Enterprise-Grade PKI-Infrastruktur** mit:
 
+- ✅ **Digitale Souveränität** - On-Premise-Betrieb, keine Vendor-Abhängigkeiten
 - ✅ **Vollautomatisierung** - 100% automatisches Certificate Lifecycle Management
 - ✅ **Multi-Organization Support** - Skalierbar für Brandenburg + Partner-Verwaltungen
-- ✅ **Cloud-Native** - Kubernetes-ready, Container-optimiert
-- ✅ **HSM-Integration** - Hardware-basierte Schlüsselsicherheit
+- ✅ **On-Premise Kubernetes** - Kubernetes-ready für eigene Infrastruktur
+- ✅ **HSM-Integration** - Hardware-basierte Schlüsselsicherheit (on-premise)
 - ✅ **Compliance-Excellence** - DSGVO, EU AI Act, BSI Standards
 - ✅ **Zero-Trust Architecture** - mTLS für alle VCC-Services
 

@@ -45,28 +45,33 @@ Das VCC-PKI System ist eine **zentrale Sicherheitskomponente** des VCC-Ökosyste
 
 ### Kernziele
 
-1. **Zero-Trust für VCC-Ecosystem**
+1. **Digitale Souveränität**
+   - On-Premise-Betrieb auf eigener Infrastruktur
+   - Keine Vendor-Abhängigkeiten
+   - Vollständige Kontrolle über alle Daten und Schlüssel
+
+2. **Zero-Trust für VCC-Ecosystem**
    - 100% aller VCC-Services (Argus, Covina, Clara, Veritas, VPB) nutzen PKI
    - mTLS für alle Service-to-Service-Kommunikation
    - Certificate-based Authentication
 
-2. **Vollautomatisierung**
+3. **Vollautomatisierung**
    - 0 manuelle Certificate-Operations
    - Automatische Renewal & Rotation
    - Self-Service für Entwickler
 
-3. **Multi-Organization Ready**
+4. **Multi-Organization Ready**
    - Support für Brandenburg + 10+ Partner-Verwaltungen
    - Tenant-Isolation & Federated Trust
    - Mandantenfähige Architektur
 
-4. **Compliance-Excellence**
+5. **Compliance-Excellence**
    - DSGVO-konform (Art. 30 Dokumentation)
    - EU AI Act Ready (für Clara KI-Services)
    - BSI IT-Grundschutz & TR-Standards
 
-5. **Cloud-Native & Skalierbar**
-   - Kubernetes-ready
+6. **On-Premise Kubernetes**
+   - Kubernetes-Deployment auf eigener Infrastruktur
    - 99.99% Availability
    - Horizontal Scaling
 
@@ -98,15 +103,15 @@ Das VCC-PKI System ist eine **zentrale Sicherheitskomponente** des VCC-Ökosyste
 
 ---
 
-### Phase 3: Cloud-Native (Q3 2026) - 3 Monate
-**Fokus:** Moderne Deployment-Architektur
+### Phase 3: On-Premise Kubernetes (Q3 2026) - 3 Monate
+**Fokus:** On-Premise Kubernetes & High Availability
 
-- Kubernetes-Native Deployment
+- Kubernetes-Deployment auf eigener Infrastruktur
 - High Availability (99.99% SLA)
 - Advanced Monitoring (Prometheus, Grafana)
-- Service Mesh Integration
+- Service Mesh Integration (optional)
 
-**Impact:** Cloud-Ready, Hochverfügbar, Observable
+**Impact:** On-Premise Production-Ready, Hochverfügbar, Observable
 
 ---
 
@@ -123,14 +128,16 @@ Das VCC-PKI System ist eine **zentrale Sicherheitskomponente** des VCC-Ökosyste
 ---
 
 ### Phase 5: Ecosystem Expansion (Q1 2027) - 3 Monate
-**Fokus:** Externe Integration
+**Fokus:** Optionale externe Integration
 
-- External CA Integration (Let's Encrypt)
+- External CA Integration (optional, nur für spezielle Anwendungsfälle)
 - SCEP/EST Protocol Support
 - Modern Web Dashboard
 - Full Multi-Org Production
 
-**Impact:** Ecosystem-Integration, User-Friendly
+**Impact:** Maximale Flexibilität, User-Friendly
+
+**Wichtig:** External CA Integration ist vollständig optional - VCC-PKI funktioniert eigenständig on-premise.
 
 ---
 
