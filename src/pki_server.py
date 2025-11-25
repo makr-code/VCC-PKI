@@ -73,6 +73,31 @@ import uvicorn
 # Import PKI components
 from ca_manager import CAManager
 from service_cert_manager import ServiceCertificateManager
+from auto_renewal_engine import AutoRenewalEngine, RenewalConfig, create_auto_renewal_engine
+from ocsp_responder import OCSPResponder, OCSPCertStatus, create_ocsp_responder
+from crl_distribution import CRLDistributionPoint, CRLConfig, CRLFormat, create_crl_distribution_point
+from vcc_service_integration import (
+    VCCServiceIntegration, VCCIntegrationConfig, VCCServiceType,
+    create_vcc_integration_router
+)
+from database_migration import DatabaseMigration, DatabaseConfig, create_migration_router
+from monitoring_dashboard import MonitoringDashboard, DashboardConfig, create_monitoring_router
+from ocsp_stapling import OCSPStaplingManager, OCSPStaplingConfig, create_stapling_router
+
+# Import Phase 2 components
+from hsm_integration import HSMManager, HSMConfig, create_hsm_router, create_hsm_manager
+from timestamp_authority import (
+    TimestampAuthority, TSAConfig, VCCTimestampService,
+    create_tsa_router, create_timestamp_authority
+)
+from certificate_templates import (
+    CertificateTemplateManager, TemplateConfig,
+    create_templates_router, create_template_manager
+)
+from multi_tenant_manager import (
+    MultiTenantManager, MultiTenantConfig,
+    create_multi_tenant_router, create_multi_tenant_manager
+)
 
 # Import database models
 from database import (
@@ -195,12 +220,27 @@ class APIResponse(BaseModel):
 # PKI Managers (initialized in lifespan)
 ca_manager: Optional[CAManager] = None
 cert_manager: Optional[ServiceCertificateManager] = None
+auto_renewal_engine: Optional[AutoRenewalEngine] = None
+ocsp_responder: Optional[OCSPResponder] = None
+crl_distribution: Optional[CRLDistributionPoint] = None
+vcc_integration: Optional[VCCServiceIntegration] = None
+db_migration: Optional[DatabaseMigration] = None
+monitoring_dashboard: Optional[MonitoringDashboard] = None
+ocsp_stapling: Optional[OCSPStaplingManager] = None
+
+# Phase 2 components
+hsm_manager: Optional[HSMManager] = None
+timestamp_authority: Optional[TimestampAuthority] = None
+vcc_timestamp_service: Optional[VCCTimestampService] = None
+template_manager: Optional[CertificateTemplateManager] = None
+multi_tenant_manager: Optional[MultiTenantManager] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
-    global ca_manager, cert_manager
+    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution, vcc_integration, db_migration, monitoring_dashboard, ocsp_stapling
+    global hsm_manager, timestamp_authority, vcc_timestamp_service, template_manager, multi_tenant_manager
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -224,6 +264,169 @@ async def lifespan(app: FastAPI):
         init_database()
         logger.info("✅ Database initialized")
         
+        # Initialize Auto-Renewal Engine (Phase 1 Feature)
+        enable_auto_renewal = os.getenv("VCC_AUTO_RENEWAL_ENABLED", "true").lower() == "true"
+        if enable_auto_renewal:
+            renewal_config = RenewalConfig(
+                renewal_threshold_days=int(os.getenv("VCC_RENEWAL_THRESHOLD_DAYS", "30")),
+                warning_threshold_days=int(os.getenv("VCC_WARNING_THRESHOLD_DAYS", "14")),
+                critical_threshold_days=int(os.getenv("VCC_CRITICAL_THRESHOLD_DAYS", "7")),
+                check_interval_seconds=int(os.getenv("VCC_CHECK_INTERVAL_SECONDS", "3600")),
+                max_retry_attempts=int(os.getenv("VCC_MAX_RETRY_ATTEMPTS", "3")),
+                enable_notifications=os.getenv("VCC_NOTIFICATIONS_ENABLED", "true").lower() == "true"
+            )
+            auto_renewal_engine = create_auto_renewal_engine(cert_manager, renewal_config)
+            auto_renewal_engine.start()
+            logger.info("✅ Auto-Renewal Engine started")
+        else:
+            logger.info("ℹ️ Auto-Renewal Engine disabled (set VCC_AUTO_RENEWAL_ENABLED=true to enable)")
+        
+        # Initialize OCSP Responder (Phase 1 Feature)
+        enable_ocsp = os.getenv("VCC_OCSP_ENABLED", "true").lower() == "true"
+        if enable_ocsp:
+            ocsp_cache_ttl = int(os.getenv("VCC_OCSP_CACHE_TTL", "3600"))
+            ocsp_validity = int(os.getenv("VCC_OCSP_VALIDITY_HOURS", "24"))
+            ocsp_responder = create_ocsp_responder(
+                ca_manager=ca_manager,
+                cache_ttl_seconds=ocsp_cache_ttl,
+                response_validity_hours=ocsp_validity
+            )
+            logger.info("✅ OCSP Responder initialized")
+        else:
+            logger.info("ℹ️ OCSP Responder disabled (set VCC_OCSP_ENABLED=true to enable)")
+        
+        # Initialize CRL Distribution Point (Phase 1 Feature)
+        enable_crl = os.getenv("VCC_CRL_ENABLED", "true").lower() == "true"
+        if enable_crl:
+            crl_config = CRLConfig(
+                crl_validity_hours=int(os.getenv("VCC_CRL_VALIDITY_HOURS", "24")),
+                crl_update_interval_seconds=int(os.getenv("VCC_CRL_UPDATE_INTERVAL", "3600")),
+                enable_delta_crl=os.getenv("VCC_DELTA_CRL_ENABLED", "true").lower() == "true",
+                crl_storage_path=os.getenv("VCC_CRL_STORAGE_PATH", "../crl")
+            )
+            crl_distribution = create_crl_distribution_point(ca_manager, crl_config)
+            crl_distribution.start()
+            logger.info("✅ CRL Distribution Point started")
+        else:
+            logger.info("ℹ️ CRL Distribution Point disabled (set VCC_CRL_ENABLED=true to enable)")
+        
+        # Initialize VCC Service Integration (Phase 1 Feature)
+        enable_vcc_integration = os.getenv("VCC_SERVICE_INTEGRATION_ENABLED", "true").lower() == "true"
+        if enable_vcc_integration:
+            vcc_config = VCCIntegrationConfig.from_env()
+            vcc_integration = VCCServiceIntegration(pki_server=app, config=vcc_config)
+            await vcc_integration.start()
+            # Add VCC Integration routes
+            app.include_router(create_vcc_integration_router(vcc_integration))
+            logger.info("✅ VCC Service Integration started")
+        else:
+            logger.info("ℹ️ VCC Service Integration disabled (set VCC_SERVICE_INTEGRATION_ENABLED=true to enable)")
+        
+        # Initialize Database Migration Manager (Phase 1 Feature)
+        enable_db_migration = os.getenv("VCC_DB_MIGRATION_ENABLED", "true").lower() == "true"
+        if enable_db_migration:
+            db_config = DatabaseConfig.from_env()
+            db_migration = DatabaseMigration(db_config)
+            # Add Database Migration routes
+            app.include_router(create_migration_router(db_migration))
+            logger.info("✅ Database Migration Manager initialized")
+            
+            # Run pending migrations if auto-migrate is enabled
+            if db_config.auto_migrate:
+                try:
+                    applied = db_migration.run_migrations()
+                    if applied:
+                        logger.info(f"✅ Applied {len(applied)} database migrations: {applied}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Database migration failed: {e}")
+        else:
+            logger.info("ℹ️ Database Migration Manager disabled (set VCC_DB_MIGRATION_ENABLED=true to enable)")
+        
+        # Initialize Monitoring Dashboard (Phase 1 Feature)
+        enable_monitoring = os.getenv("VCC_MONITORING_ENABLED", "true").lower() == "true"
+        if enable_monitoring:
+            dashboard_config = DashboardConfig.from_env()
+            monitoring_dashboard = MonitoringDashboard(dashboard_config)
+            # Add Monitoring Dashboard routes
+            app.include_router(create_monitoring_router(monitoring_dashboard))
+            logger.info("✅ Monitoring Dashboard initialized")
+        else:
+            logger.info("ℹ️ Monitoring Dashboard disabled (set VCC_MONITORING_ENABLED=true to enable)")
+        
+        # Initialize OCSP Stapling (Phase 1 Feature)
+        enable_stapling = os.getenv("VCC_OCSP_STAPLING_ENABLED", "true").lower() == "true"
+        if enable_stapling and ocsp_responder:
+            stapling_config = OCSPStaplingConfig.from_env()
+            ocsp_stapling = OCSPStaplingManager(ocsp_responder, stapling_config)
+            ocsp_stapling.start()
+            # Add OCSP Stapling routes
+            app.include_router(create_stapling_router(ocsp_stapling))
+            logger.info("✅ OCSP Stapling Manager started")
+        else:
+            logger.info("ℹ️ OCSP Stapling disabled (set VCC_OCSP_STAPLING_ENABLED=true to enable)")
+        
+        # =====================================================================
+        # PHASE 2: Enterprise Features
+        # =====================================================================
+        
+        # Initialize HSM Integration (Phase 2 Feature)
+        enable_hsm = os.getenv("VCC_HSM_ENABLED", "false").lower() == "true"
+        if enable_hsm:
+            hsm_config = HSMConfig(
+                hsm_type=os.getenv("VCC_HSM_TYPE", "softhsm"),
+                library_path=os.getenv("VCC_HSM_LIBRARY_PATH", "/usr/lib/softhsm/libsofthsm2.so"),
+                slot_id=int(os.getenv("VCC_HSM_SLOT_ID", "0")),
+                pin=os.getenv("VCC_HSM_PIN", ""),
+                token_label=os.getenv("VCC_HSM_TOKEN_LABEL", "VCC-PKI"),
+            )
+            hsm_manager = create_hsm_manager(hsm_config)
+            # Add HSM routes
+            app.include_router(create_hsm_router(hsm_manager))
+            logger.info("✅ HSM Integration initialized")
+        else:
+            logger.info("ℹ️ HSM Integration disabled (set VCC_HSM_ENABLED=true to enable)")
+        
+        # Initialize Timestamp Authority (Phase 2 Feature)
+        enable_tsa = os.getenv("VCC_TSA_ENABLED", "true").lower() == "true"
+        if enable_tsa:
+            tsa_config = TSAConfig(
+                enabled=True,
+                tsa_name=os.getenv("VCC_TSA_NAME", "VCC Timestamp Authority"),
+                key_type=os.getenv("VCC_TSA_KEY_TYPE", "rsa_4096"),
+                storage_path=os.getenv("VCC_TSA_STORAGE_PATH", "../tsa_storage"),
+            )
+            timestamp_authority, vcc_timestamp_service = create_timestamp_authority(
+                config=tsa_config,
+                ca_manager=ca_manager
+            )
+            # Add TSA routes
+            app.include_router(create_tsa_router(timestamp_authority, vcc_timestamp_service))
+            logger.info("✅ Timestamp Authority initialized")
+        else:
+            logger.info("ℹ️ Timestamp Authority disabled (set VCC_TSA_ENABLED=true to enable)")
+        
+        # Initialize Certificate Templates (Phase 2 Feature)
+        enable_templates = os.getenv("VCC_TEMPLATES_ENABLED", "true").lower() == "true"
+        if enable_templates:
+            template_config = TemplateConfig.from_env()
+            template_manager = create_template_manager(template_config)
+            # Add Templates routes
+            app.include_router(create_templates_router(template_manager))
+            logger.info("✅ Certificate Template Manager initialized")
+        else:
+            logger.info("ℹ️ Certificate Templates disabled (set VCC_TEMPLATES_ENABLED=true to enable)")
+        
+        # Initialize Multi-Tenant Manager (Phase 2 Feature)
+        enable_multi_tenant = os.getenv("VCC_MULTI_TENANT_ENABLED", "true").lower() == "true"
+        if enable_multi_tenant:
+            tenant_config = MultiTenantConfig.from_env()
+            multi_tenant_manager = create_multi_tenant_manager(tenant_config)
+            # Add Multi-Tenant routes
+            app.include_router(create_multi_tenant_router(multi_tenant_manager))
+            logger.info("✅ Multi-Tenant Manager initialized")
+        else:
+            logger.info("ℹ️ Multi-Tenant Manager disabled (set VCC_MULTI_TENANT_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -239,6 +442,40 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down VCC PKI Server...")
+    
+    # Stop OCSP Stapling
+    if ocsp_stapling:
+        ocsp_stapling.stop()
+        logger.info("✅ OCSP Stapling Manager stopped")
+    
+    # Stop VCC Service Integration
+    if vcc_integration:
+        await vcc_integration.stop()
+        logger.info("✅ VCC Service Integration stopped")
+    
+    # Stop CRL Distribution Point
+    if crl_distribution:
+        crl_distribution.stop()
+        logger.info("✅ CRL Distribution Point stopped")
+    
+    # Stop Auto-Renewal Engine
+    if auto_renewal_engine:
+        auto_renewal_engine.stop()
+        logger.info("✅ Auto-Renewal Engine stopped")
+    
+    # Phase 2 components don't need explicit shutdown (stateless or auto-cleanup)
+    if hsm_manager:
+        logger.info("✅ HSM Manager cleanup complete")
+    
+    if timestamp_authority:
+        logger.info("✅ Timestamp Authority cleanup complete")
+    
+    if template_manager:
+        logger.info("✅ Certificate Template Manager cleanup complete")
+    
+    if multi_tenant_manager:
+        logger.info("✅ Multi-Tenant Manager cleanup complete")
+    
     logger.info("👋 VCC PKI Server stopped")
 
 
@@ -1049,6 +1286,505 @@ async def get_crl(db: Session = Depends(get_db)):
         
     except Exception as e:
         logger.error(f"❌ Failed to get CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Auto-Renewal Engine Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/auto-renewal/status")
+async def get_auto_renewal_status():
+    """
+    Get status of the auto-renewal engine.
+    
+    Returns engine statistics and current state.
+    """
+    if auto_renewal_engine is None:
+        return {
+            "enabled": False,
+            "message": "Auto-renewal engine is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "running": auto_renewal_engine.is_running,
+        "statistics": auto_renewal_engine.statistics,
+        "config": {
+            "renewal_threshold_days": auto_renewal_engine.config.renewal_threshold_days,
+            "warning_threshold_days": auto_renewal_engine.config.warning_threshold_days,
+            "critical_threshold_days": auto_renewal_engine.config.critical_threshold_days,
+            "check_interval_seconds": auto_renewal_engine.config.check_interval_seconds,
+            "max_retry_attempts": auto_renewal_engine.config.max_retry_attempts
+        }
+    }
+
+
+@app.get("/api/v1/auto-renewal/certificates")
+async def get_certificates_renewal_status():
+    """
+    Get renewal status of all active certificates.
+    
+    Returns list of certificates with their renewal status (ok/scheduled/warning/critical).
+    """
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not enabled"
+        )
+    
+    try:
+        certificates = auto_renewal_engine.get_certificates_status()
+        
+        # Group by status for summary
+        status_counts = {"ok": 0, "scheduled": 0, "warning": 0, "critical": 0}
+        for cert in certificates:
+            status_counts[cert["renewal_status"]] += 1
+        
+        return {
+            "total_certificates": len(certificates),
+            "status_summary": status_counts,
+            "certificates": certificates
+        }
+    except Exception as e:
+        logger.error(f"❌ Failed to get certificate renewal status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/force-check")
+async def force_renewal_check():
+    """
+    Force an immediate certificate renewal check.
+    
+    Useful for testing or when immediate renewal is needed.
+    """
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not enabled"
+        )
+    
+    try:
+        logger.info("⚡ Manual renewal check triggered via API")
+        auto_renewal_engine.force_check()
+        
+        return APIResponse(
+            success=True,
+            message="Renewal check completed",
+            data={"statistics": auto_renewal_engine.statistics}
+        )
+    except Exception as e:
+        logger.error(f"❌ Forced renewal check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/start")
+async def start_auto_renewal():
+    """Start the auto-renewal engine if it's stopped."""
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not configured"
+        )
+    
+    if auto_renewal_engine.is_running:
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine is already running"
+        )
+    
+    try:
+        auto_renewal_engine.start()
+        logger.info("✅ Auto-renewal engine started via API")
+        
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine started"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to start auto-renewal engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/stop")
+async def stop_auto_renewal():
+    """Stop the auto-renewal engine."""
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not configured"
+        )
+    
+    if not auto_renewal_engine.is_running:
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine is already stopped"
+        )
+    
+    try:
+        auto_renewal_engine.stop()
+        logger.info("✅ Auto-renewal engine stopped via API")
+        
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine stopped"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to stop auto-renewal engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# OCSP Responder Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/ocsp/status")
+async def get_ocsp_status():
+    """
+    Get status of the OCSP responder.
+    
+    Returns responder statistics and current state.
+    """
+    if ocsp_responder is None:
+        return {
+            "enabled": False,
+            "message": "OCSP responder is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "statistics": ocsp_responder.statistics,
+        "certificate_summary": ocsp_responder.get_status_summary()
+    }
+
+
+@app.get("/api/v1/ocsp/check/{serial_number}")
+async def check_certificate_ocsp_status(serial_number: str):
+    """
+    Check certificate status via OCSP.
+    
+    Args:
+        serial_number: Certificate serial number (hex string)
+    
+    Returns:
+        OCSP status information for the certificate
+    """
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        response = ocsp_responder.check_certificate_status(serial_number)
+        
+        result = {
+            "serial_number": response.serial_number,
+            "status": response.status.value,
+            "this_update": response.this_update.isoformat(),
+            "next_update": response.next_update.isoformat()
+        }
+        
+        if response.status == OCSPCertStatus.REVOKED:
+            result["revocation_time"] = response.revocation_time.isoformat() if response.revocation_time else None
+            result["revocation_reason"] = response.revocation_reason.name if response.revocation_reason else None
+        
+        return result
+    except Exception as e:
+        logger.error(f"❌ OCSP status check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/ocsp")
+async def handle_ocsp_request(request: Request):
+    """
+    RFC 6960 OCSP request endpoint.
+    
+    Accepts DER-encoded OCSP request in request body.
+    Returns DER-encoded OCSP response.
+    
+    Content-Type: application/ocsp-request
+    """
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        # Read request body
+        request_bytes = await request.body()
+        
+        if not request_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty OCSP request"
+            )
+        
+        # Handle OCSP request
+        response_bytes = ocsp_responder.handle_ocsp_request(request_bytes)
+        
+        return Response(
+            content=response_bytes,
+            media_type="application/ocsp-response"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ OCSP request handling failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/ocsp/clear-cache")
+async def clear_ocsp_cache():
+    """Clear the OCSP response cache."""
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        ocsp_responder.clear_cache()
+        
+        return APIResponse(
+            success=True,
+            message="OCSP cache cleared",
+            data={"new_cache_size": ocsp_responder.cache.size}
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to clear OCSP cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CRL Distribution Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/crl/status")
+async def get_crl_status():
+    """
+    Get status of the CRL distribution point.
+    
+    Returns CRL statistics and current state.
+    """
+    if crl_distribution is None:
+        return {
+            "enabled": False,
+            "message": "CRL distribution is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "running": crl_distribution.is_running,
+        "statistics": crl_distribution.statistics,
+        "crl_info": crl_distribution.get_crl_info(),
+        "config": {
+            "crl_validity_hours": crl_distribution.config.crl_validity_hours,
+            "update_interval_seconds": crl_distribution.config.crl_update_interval_seconds,
+            "delta_crl_enabled": crl_distribution.config.enable_delta_crl
+        }
+    }
+
+
+@app.get("/api/v1/crl/full")
+async def get_full_crl():
+    """
+    Get the full Certificate Revocation List (DER format).
+    
+    Returns DER-encoded CRL suitable for import into trust stores.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        crl_bytes = crl_distribution.get_crl(CRLFormat.DER)
+        
+        return Response(
+            content=crl_bytes,
+            media_type="application/pkix-crl",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca.crl"
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to get CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/full/pem")
+async def get_full_crl_pem():
+    """
+    Get the full Certificate Revocation List (PEM format).
+    
+    Returns PEM-encoded CRL suitable for text-based systems.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        crl_bytes = crl_distribution.get_crl(CRLFormat.PEM)
+        
+        return Response(
+            content=crl_bytes,
+            media_type="application/x-pem-file",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca.crl.pem"
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to get CRL (PEM): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/delta")
+async def get_delta_crl():
+    """
+    Get the delta CRL (DER format).
+    
+    Returns only recent revocations since the last full CRL.
+    More efficient for frequent updates.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    if not crl_distribution.config.enable_delta_crl:
+        raise HTTPException(
+            status_code=404,
+            detail="Delta CRL is not enabled"
+        )
+    
+    try:
+        delta_crl = crl_distribution.get_delta_crl(CRLFormat.DER)
+        
+        if delta_crl is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Delta CRL not yet generated"
+            )
+        
+        return Response(
+            content=delta_crl,
+            media_type="application/pkix-crl",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca-delta.crl"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to get delta CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/info")
+async def get_crl_info():
+    """
+    Get information about the current CRL.
+    
+    Returns CRL metadata including issuer, validity, and revocation count.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    return crl_distribution.get_crl_info()
+
+
+@app.post("/api/v1/crl/regenerate")
+async def force_crl_regeneration():
+    """
+    Force immediate CRL regeneration.
+    
+    Useful when certificates have been revoked and immediate distribution is needed.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        logger.info("⚡ Manual CRL regeneration triggered via API")
+        crl_distribution.force_regenerate()
+        
+        return APIResponse(
+            success=True,
+            message="CRL regenerated",
+            data={
+                "crl_info": crl_distribution.get_crl_info(),
+                "statistics": crl_distribution.statistics
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ CRL regeneration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/crl/start")
+async def start_crl_distribution():
+    """Start the CRL distribution service if it's stopped."""
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not configured"
+        )
+    
+    if crl_distribution.is_running:
+        return APIResponse(
+            success=True,
+            message="CRL distribution is already running"
+        )
+    
+    try:
+        crl_distribution.start()
+        logger.info("✅ CRL distribution started via API")
+        
+        return APIResponse(
+            success=True,
+            message="CRL distribution started"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to start CRL distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/crl/stop")
+async def stop_crl_distribution():
+    """Stop the CRL distribution service."""
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not configured"
+        )
+    
+    if not crl_distribution.is_running:
+        return APIResponse(
+            success=True,
+            message="CRL distribution is already stopped"
+        )
+    
+    try:
+        crl_distribution.stop()
+        logger.info("✅ CRL distribution stopped via API")
+        
+        return APIResponse(
+            success=True,
+            message="CRL distribution stopped"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to stop CRL distribution: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
