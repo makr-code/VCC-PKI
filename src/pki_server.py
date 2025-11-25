@@ -84,6 +84,21 @@ from database_migration import DatabaseMigration, DatabaseConfig, create_migrati
 from monitoring_dashboard import MonitoringDashboard, DashboardConfig, create_monitoring_router
 from ocsp_stapling import OCSPStaplingManager, OCSPStaplingConfig, create_stapling_router
 
+# Import Phase 2 components
+from hsm_integration import HSMManager, HSMConfig, create_hsm_router, create_hsm_manager
+from timestamp_authority import (
+    TimestampAuthority, TSAConfig, VCCTimestampService,
+    create_tsa_router, create_timestamp_authority
+)
+from certificate_templates import (
+    CertificateTemplateManager, TemplateConfig,
+    create_templates_router, create_template_manager
+)
+from multi_tenant_manager import (
+    MultiTenantManager, MultiTenantConfig,
+    create_multi_tenant_router, create_multi_tenant_manager
+)
+
 # Import database models
 from database import (
     get_db, 
@@ -213,11 +228,19 @@ db_migration: Optional[DatabaseMigration] = None
 monitoring_dashboard: Optional[MonitoringDashboard] = None
 ocsp_stapling: Optional[OCSPStaplingManager] = None
 
+# Phase 2 components
+hsm_manager: Optional[HSMManager] = None
+timestamp_authority: Optional[TimestampAuthority] = None
+vcc_timestamp_service: Optional[VCCTimestampService] = None
+template_manager: Optional[CertificateTemplateManager] = None
+multi_tenant_manager: Optional[MultiTenantManager] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
     global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution, vcc_integration, db_migration, monitoring_dashboard, ocsp_stapling
+    global hsm_manager, timestamp_authority, vcc_timestamp_service, template_manager, multi_tenant_manager
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -342,6 +365,68 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("ℹ️ OCSP Stapling disabled (set VCC_OCSP_STAPLING_ENABLED=true to enable)")
         
+        # =====================================================================
+        # PHASE 2: Enterprise Features
+        # =====================================================================
+        
+        # Initialize HSM Integration (Phase 2 Feature)
+        enable_hsm = os.getenv("VCC_HSM_ENABLED", "false").lower() == "true"
+        if enable_hsm:
+            hsm_config = HSMConfig(
+                hsm_type=os.getenv("VCC_HSM_TYPE", "softhsm"),
+                library_path=os.getenv("VCC_HSM_LIBRARY_PATH", "/usr/lib/softhsm/libsofthsm2.so"),
+                slot_id=int(os.getenv("VCC_HSM_SLOT_ID", "0")),
+                pin=os.getenv("VCC_HSM_PIN", ""),
+                token_label=os.getenv("VCC_HSM_TOKEN_LABEL", "VCC-PKI"),
+            )
+            hsm_manager = create_hsm_manager(hsm_config)
+            # Add HSM routes
+            app.include_router(create_hsm_router(hsm_manager))
+            logger.info("✅ HSM Integration initialized")
+        else:
+            logger.info("ℹ️ HSM Integration disabled (set VCC_HSM_ENABLED=true to enable)")
+        
+        # Initialize Timestamp Authority (Phase 2 Feature)
+        enable_tsa = os.getenv("VCC_TSA_ENABLED", "true").lower() == "true"
+        if enable_tsa:
+            tsa_config = TSAConfig(
+                enabled=True,
+                tsa_name=os.getenv("VCC_TSA_NAME", "VCC Timestamp Authority"),
+                key_type=os.getenv("VCC_TSA_KEY_TYPE", "rsa_4096"),
+                storage_path=os.getenv("VCC_TSA_STORAGE_PATH", "../tsa_storage"),
+            )
+            timestamp_authority, vcc_timestamp_service = create_timestamp_authority(
+                config=tsa_config,
+                ca_manager=ca_manager
+            )
+            # Add TSA routes
+            app.include_router(create_tsa_router(timestamp_authority, vcc_timestamp_service))
+            logger.info("✅ Timestamp Authority initialized")
+        else:
+            logger.info("ℹ️ Timestamp Authority disabled (set VCC_TSA_ENABLED=true to enable)")
+        
+        # Initialize Certificate Templates (Phase 2 Feature)
+        enable_templates = os.getenv("VCC_TEMPLATES_ENABLED", "true").lower() == "true"
+        if enable_templates:
+            template_config = TemplateConfig.from_env()
+            template_manager = create_template_manager(template_config)
+            # Add Templates routes
+            app.include_router(create_templates_router(template_manager))
+            logger.info("✅ Certificate Template Manager initialized")
+        else:
+            logger.info("ℹ️ Certificate Templates disabled (set VCC_TEMPLATES_ENABLED=true to enable)")
+        
+        # Initialize Multi-Tenant Manager (Phase 2 Feature)
+        enable_multi_tenant = os.getenv("VCC_MULTI_TENANT_ENABLED", "true").lower() == "true"
+        if enable_multi_tenant:
+            tenant_config = MultiTenantConfig.from_env()
+            multi_tenant_manager = create_multi_tenant_manager(tenant_config)
+            # Add Multi-Tenant routes
+            app.include_router(create_multi_tenant_router(multi_tenant_manager))
+            logger.info("✅ Multi-Tenant Manager initialized")
+        else:
+            logger.info("ℹ️ Multi-Tenant Manager disabled (set VCC_MULTI_TENANT_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -377,6 +462,19 @@ async def lifespan(app: FastAPI):
     if auto_renewal_engine:
         auto_renewal_engine.stop()
         logger.info("✅ Auto-Renewal Engine stopped")
+    
+    # Phase 2 components don't need explicit shutdown (stateless or auto-cleanup)
+    if hsm_manager:
+        logger.info("✅ HSM Manager cleanup complete")
+    
+    if timestamp_authority:
+        logger.info("✅ Timestamp Authority cleanup complete")
+    
+    if template_manager:
+        logger.info("✅ Certificate Template Manager cleanup complete")
+    
+    if multi_tenant_manager:
+        logger.info("✅ Multi-Tenant Manager cleanup complete")
     
     logger.info("👋 VCC PKI Server stopped")
 
