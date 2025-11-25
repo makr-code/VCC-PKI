@@ -75,6 +75,7 @@ from ca_manager import CAManager
 from service_cert_manager import ServiceCertificateManager
 from auto_renewal_engine import AutoRenewalEngine, RenewalConfig, create_auto_renewal_engine
 from ocsp_responder import OCSPResponder, OCSPCertStatus, create_ocsp_responder
+from crl_distribution import CRLDistributionPoint, CRLConfig, CRLFormat, create_crl_distribution_point
 
 # Import database models
 from database import (
@@ -199,12 +200,13 @@ ca_manager: Optional[CAManager] = None
 cert_manager: Optional[ServiceCertificateManager] = None
 auto_renewal_engine: Optional[AutoRenewalEngine] = None
 ocsp_responder: Optional[OCSPResponder] = None
+crl_distribution: Optional[CRLDistributionPoint] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
-    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder
+    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -259,6 +261,21 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("ℹ️ OCSP Responder disabled (set VCC_OCSP_ENABLED=true to enable)")
         
+        # Initialize CRL Distribution Point (Phase 1 Feature)
+        enable_crl = os.getenv("VCC_CRL_ENABLED", "true").lower() == "true"
+        if enable_crl:
+            crl_config = CRLConfig(
+                crl_validity_hours=int(os.getenv("VCC_CRL_VALIDITY_HOURS", "24")),
+                crl_update_interval_seconds=int(os.getenv("VCC_CRL_UPDATE_INTERVAL", "3600")),
+                enable_delta_crl=os.getenv("VCC_DELTA_CRL_ENABLED", "true").lower() == "true",
+                crl_storage_path=os.getenv("VCC_CRL_STORAGE_PATH", "../crl")
+            )
+            crl_distribution = create_crl_distribution_point(ca_manager, crl_config)
+            crl_distribution.start()
+            logger.info("✅ CRL Distribution Point started")
+        else:
+            logger.info("ℹ️ CRL Distribution Point disabled (set VCC_CRL_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -274,6 +291,11 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down VCC PKI Server...")
+    
+    # Stop CRL Distribution Point
+    if crl_distribution:
+        crl_distribution.stop()
+        logger.info("✅ CRL Distribution Point stopped")
     
     # Stop Auto-Renewal Engine
     if auto_renewal_engine:
@@ -1358,6 +1380,237 @@ async def clear_ocsp_cache():
         )
     except Exception as e:
         logger.error(f"❌ Failed to clear OCSP cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CRL Distribution Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/crl/status")
+async def get_crl_status():
+    """
+    Get status of the CRL distribution point.
+    
+    Returns CRL statistics and current state.
+    """
+    if crl_distribution is None:
+        return {
+            "enabled": False,
+            "message": "CRL distribution is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "running": crl_distribution.is_running,
+        "statistics": crl_distribution.statistics,
+        "crl_info": crl_distribution.get_crl_info(),
+        "config": {
+            "crl_validity_hours": crl_distribution.config.crl_validity_hours,
+            "update_interval_seconds": crl_distribution.config.crl_update_interval_seconds,
+            "delta_crl_enabled": crl_distribution.config.enable_delta_crl
+        }
+    }
+
+
+@app.get("/api/v1/crl/full")
+async def get_full_crl():
+    """
+    Get the full Certificate Revocation List (DER format).
+    
+    Returns DER-encoded CRL suitable for import into trust stores.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        crl_bytes = crl_distribution.get_crl(CRLFormat.DER)
+        
+        return Response(
+            content=crl_bytes,
+            media_type="application/pkix-crl",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca.crl"
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to get CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/full/pem")
+async def get_full_crl_pem():
+    """
+    Get the full Certificate Revocation List (PEM format).
+    
+    Returns PEM-encoded CRL suitable for text-based systems.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        crl_bytes = crl_distribution.get_crl(CRLFormat.PEM)
+        
+        return Response(
+            content=crl_bytes,
+            media_type="application/x-pem-file",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca.crl.pem"
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to get CRL (PEM): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/delta")
+async def get_delta_crl():
+    """
+    Get the delta CRL (DER format).
+    
+    Returns only recent revocations since the last full CRL.
+    More efficient for frequent updates.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    if not crl_distribution.config.enable_delta_crl:
+        raise HTTPException(
+            status_code=404,
+            detail="Delta CRL is not enabled"
+        )
+    
+    try:
+        delta_crl = crl_distribution.get_delta_crl(CRLFormat.DER)
+        
+        if delta_crl is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Delta CRL not yet generated"
+            )
+        
+        return Response(
+            content=delta_crl,
+            media_type="application/pkix-crl",
+            headers={
+                "Content-Disposition": "attachment; filename=vcc-ca-delta.crl"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to get delta CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/crl/info")
+async def get_crl_info():
+    """
+    Get information about the current CRL.
+    
+    Returns CRL metadata including issuer, validity, and revocation count.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    return crl_distribution.get_crl_info()
+
+
+@app.post("/api/v1/crl/regenerate")
+async def force_crl_regeneration():
+    """
+    Force immediate CRL regeneration.
+    
+    Useful when certificates have been revoked and immediate distribution is needed.
+    """
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not enabled"
+        )
+    
+    try:
+        logger.info("⚡ Manual CRL regeneration triggered via API")
+        crl_distribution.force_regenerate()
+        
+        return APIResponse(
+            success=True,
+            message="CRL regenerated",
+            data={
+                "crl_info": crl_distribution.get_crl_info(),
+                "statistics": crl_distribution.statistics
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ CRL regeneration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/crl/start")
+async def start_crl_distribution():
+    """Start the CRL distribution service if it's stopped."""
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not configured"
+        )
+    
+    if crl_distribution.is_running:
+        return APIResponse(
+            success=True,
+            message="CRL distribution is already running"
+        )
+    
+    try:
+        crl_distribution.start()
+        logger.info("✅ CRL distribution started via API")
+        
+        return APIResponse(
+            success=True,
+            message="CRL distribution started"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to start CRL distribution: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/crl/stop")
+async def stop_crl_distribution():
+    """Stop the CRL distribution service."""
+    if crl_distribution is None:
+        raise HTTPException(
+            status_code=503,
+            detail="CRL distribution is not configured"
+        )
+    
+    if not crl_distribution.is_running:
+        return APIResponse(
+            success=True,
+            message="CRL distribution is already stopped"
+        )
+    
+    try:
+        crl_distribution.stop()
+        logger.info("✅ CRL distribution stopped via API")
+        
+        return APIResponse(
+            success=True,
+            message="CRL distribution stopped"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to stop CRL distribution: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
