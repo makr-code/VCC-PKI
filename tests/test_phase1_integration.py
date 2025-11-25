@@ -418,6 +418,278 @@ class TestPhase1Integration:
 # ============================================================================
 # Run Tests
 # ============================================================================
+# VCC Service Integration Tests
+# ============================================================================
+
+class TestVCCServiceIntegration:
+    """Tests for VCC Service Integration module"""
+    
+    def test_import(self):
+        """Test module imports correctly"""
+        from vcc_service_integration import (
+            VCCServiceIntegration,
+            VCCIntegrationConfig,
+            VCCServiceType,
+            ServiceStatus,
+            AuthMethod,
+            TrustLevel,
+            VCCService,
+            VCCServiceRegistry
+        )
+        
+        assert VCCServiceIntegration is not None
+        assert VCCIntegrationConfig is not None
+    
+    def test_config_defaults(self):
+        """Test VCCIntegrationConfig default values"""
+        from vcc_service_integration import VCCIntegrationConfig
+        
+        config = VCCIntegrationConfig()
+        
+        assert config.discovery_enabled == True
+        assert config.health_check_enabled == True
+        assert config.auto_certificate_provisioning == True
+        assert config.mtls_enabled == True
+        assert config.zero_trust_enabled == True
+        assert config.certificate_validity_days == 365
+    
+    def test_service_type_enum(self):
+        """Test VCCServiceType enumeration"""
+        from vcc_service_integration import VCCServiceType
+        
+        assert VCCServiceType.COVINA_BACKEND.value == "covina-backend"
+        assert VCCServiceType.VERITAS_BACKEND.value == "veritas-backend"
+        assert VCCServiceType.CLARA_BACKEND.value == "clara-backend"
+        assert VCCServiceType.PKI_SERVER.value == "pki-server"
+    
+    def test_service_status_enum(self):
+        """Test ServiceStatus enumeration"""
+        from vcc_service_integration import ServiceStatus
+        
+        assert ServiceStatus.PENDING.value == "pending"
+        assert ServiceStatus.ACTIVE.value == "active"
+        assert ServiceStatus.UNHEALTHY.value == "unhealthy"
+    
+    def test_trust_level_enum(self):
+        """Test TrustLevel enumeration"""
+        from vcc_service_integration import TrustLevel
+        
+        assert TrustLevel.HIGH.value == "high"
+        assert TrustLevel.MEDIUM.value == "medium"
+        assert TrustLevel.LOW.value == "low"
+        assert TrustLevel.UNTRUSTED.value == "untrusted"
+    
+    def test_vcc_service_creation(self):
+        """Test VCCService creation"""
+        from vcc_service_integration import VCCService, VCCServiceType, ServiceStatus
+        
+        service = VCCService(
+            service_id="test-service",
+            service_type=VCCServiceType.GENERIC,
+            display_name="Test Service",
+            description="A test service",
+            endpoints=["https://test.vcc.local:443"]
+        )
+        
+        assert service.service_id == "test-service"
+        assert service.service_type == VCCServiceType.GENERIC
+        assert service.status == ServiceStatus.PENDING
+    
+    def test_vcc_service_to_dict(self):
+        """Test VCCService.to_dict()"""
+        from vcc_service_integration import VCCService, VCCServiceType
+        
+        service = VCCService(
+            service_id="test-service",
+            service_type=VCCServiceType.COVINA_BACKEND,
+            display_name="Test Service",
+            description="A test service",
+            endpoints=["https://test.vcc.local:443"]
+        )
+        
+        data = service.to_dict()
+        
+        assert data["service_id"] == "test-service"
+        assert data["service_type"] == "covina-backend"
+        assert "endpoints" in data
+        assert "created_at" in data
+    
+    def test_service_registry(self):
+        """Test VCCServiceRegistry"""
+        from vcc_service_integration import VCCServiceRegistry, VCCService, VCCServiceType
+        
+        registry = VCCServiceRegistry()
+        
+        service = VCCService(
+            service_id="test-service",
+            service_type=VCCServiceType.COVINA_BACKEND,
+            display_name="Test Service",
+            description="A test service",
+            endpoints=["https://test.vcc.local:443"]
+        )
+        
+        # Register
+        result = registry.register(service)
+        assert result == True
+        
+        # Get
+        retrieved = registry.get("test-service")
+        assert retrieved is not None
+        assert retrieved.service_id == "test-service"
+        
+        # Get all
+        all_services = registry.get_all()
+        assert len(all_services) == 1
+        
+        # Unregister
+        result = registry.unregister("test-service")
+        assert result == True
+        
+        # Verify unregistered
+        retrieved = registry.get("test-service")
+        assert retrieved is None
+    
+    def test_integration_initialization(self):
+        """Test VCCServiceIntegration initialization"""
+        from vcc_service_integration import VCCServiceIntegration, VCCIntegrationConfig
+        
+        config = VCCIntegrationConfig()
+        integration = VCCServiceIntegration(config=config)
+        
+        assert integration.registry is not None
+        assert integration.provisioner is not None
+        assert integration.health_checker is not None
+
+
+# ============================================================================
+# Database Migration Tests
+# ============================================================================
+
+class TestDatabaseMigration:
+    """Tests for Database Migration module"""
+    
+    def test_import(self):
+        """Test module imports correctly"""
+        from database_migration import (
+            DatabaseMigration,
+            DatabaseConfig,
+            DatabaseType,
+            MigrationStatus,
+            IsolationLevel
+        )
+        
+        assert DatabaseMigration is not None
+        assert DatabaseConfig is not None
+    
+    def test_database_type_enum(self):
+        """Test DatabaseType enumeration"""
+        from database_migration import DatabaseType
+        
+        assert DatabaseType.SQLITE.value == "sqlite"
+        assert DatabaseType.POSTGRESQL.value == "postgresql"
+    
+    def test_isolation_level_enum(self):
+        """Test IsolationLevel enumeration"""
+        from database_migration import IsolationLevel
+        
+        assert IsolationLevel.STRICT.value == "strict"
+        assert IsolationLevel.COLLABORATIVE.value == "collaborative"
+        assert IsolationLevel.FEDERATED.value == "federated"
+    
+    def test_config_defaults(self):
+        """Test DatabaseConfig default values"""
+        from database_migration import DatabaseConfig, DatabaseType
+        
+        config = DatabaseConfig()
+        
+        assert config.database_type == DatabaseType.SQLITE
+        assert config.pool_size == 5
+        assert config.max_overflow == 10
+        assert config.multi_tenant_enabled == False
+        assert config.audit_chain_enabled == True
+    
+    def test_migration_schema_versions(self):
+        """Test migration schema versions are defined"""
+        from database_migration import DatabaseMigration
+        
+        migration = DatabaseMigration()
+        
+        assert len(migration.SCHEMA_VERSIONS) > 0
+        
+        # Check first version
+        version, description, func_name = migration.SCHEMA_VERSIONS[0]
+        assert version == "1.0.0"
+        assert "initial" in description.lower() or "Initial" in description
+    
+    def test_organization_model(self):
+        """Test Organization model"""
+        from database_migration import Organization
+        
+        org = Organization(
+            org_name="test-org",
+            display_name="Test Organization",
+            description="A test organization"
+        )
+        
+        assert org.org_name == "test-org"
+        # Note: Column defaults are only applied when persisted to DB
+        # Test that the model can be created
+        assert org.display_name == "Test Organization"
+    
+    def test_certificate_template_model(self):
+        """Test CertificateTemplate model"""
+        from database_migration import CertificateTemplate
+        
+        template = CertificateTemplate(
+            template_name="vcc-service",
+            description="VCC Service Certificate Template",
+            validity_days=365,
+            auto_renewal=True  # Explicitly set
+        )
+        
+        assert template.template_name == "vcc-service"
+        assert template.validity_days == 365
+        assert template.auto_renewal == True
+    
+    def test_enhanced_audit_log_hash(self):
+        """Test EnhancedAuditLog hash calculation"""
+        from database_migration import EnhancedAuditLog
+        from datetime import datetime, timezone
+        
+        log = EnhancedAuditLog(
+            action="CERTIFICATE_ISSUED",
+            resource_type="certificate",
+            resource_id="test-cert-123",
+            user_id="admin",
+            details='{"common_name": "test.vcc.local"}'
+        )
+        log.timestamp = datetime.now(timezone.utc)
+        
+        # Calculate hash
+        hash1 = log.calculate_hash("")
+        hash2 = log.calculate_hash("")
+        
+        assert hash1 == hash2  # Same input should produce same hash
+        assert len(hash1) == 64  # SHA256 produces 64 hex characters
+    
+    def test_migration_manager_initialization(self):
+        """Test DatabaseMigration initialization"""
+        from database_migration import DatabaseMigration, DatabaseConfig, DatabaseType
+        
+        config = DatabaseConfig(
+            database_type=DatabaseType.SQLITE,
+            sqlite_path="/tmp/test_pki.db"
+        )
+        
+        migration = DatabaseMigration(config)
+        
+        assert migration.config == config
+        assert migration.config.database_type == DatabaseType.SQLITE
+
+
+# ============================================================================
+# Run Tests
+# ============================================================================
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

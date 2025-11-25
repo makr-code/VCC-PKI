@@ -76,6 +76,11 @@ from service_cert_manager import ServiceCertificateManager
 from auto_renewal_engine import AutoRenewalEngine, RenewalConfig, create_auto_renewal_engine
 from ocsp_responder import OCSPResponder, OCSPCertStatus, create_ocsp_responder
 from crl_distribution import CRLDistributionPoint, CRLConfig, CRLFormat, create_crl_distribution_point
+from vcc_service_integration import (
+    VCCServiceIntegration, VCCIntegrationConfig, VCCServiceType,
+    create_vcc_integration_router
+)
+from database_migration import DatabaseMigration, DatabaseConfig, create_migration_router
 
 # Import database models
 from database import (
@@ -201,12 +206,14 @@ cert_manager: Optional[ServiceCertificateManager] = None
 auto_renewal_engine: Optional[AutoRenewalEngine] = None
 ocsp_responder: Optional[OCSPResponder] = None
 crl_distribution: Optional[CRLDistributionPoint] = None
+vcc_integration: Optional[VCCServiceIntegration] = None
+db_migration: Optional[DatabaseMigration] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
-    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution
+    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution, vcc_integration, db_migration
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -276,6 +283,38 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("ℹ️ CRL Distribution Point disabled (set VCC_CRL_ENABLED=true to enable)")
         
+        # Initialize VCC Service Integration (Phase 1 Feature)
+        enable_vcc_integration = os.getenv("VCC_SERVICE_INTEGRATION_ENABLED", "true").lower() == "true"
+        if enable_vcc_integration:
+            vcc_config = VCCIntegrationConfig.from_env()
+            vcc_integration = VCCServiceIntegration(pki_server=app, config=vcc_config)
+            await vcc_integration.start()
+            # Add VCC Integration routes
+            app.include_router(create_vcc_integration_router(vcc_integration))
+            logger.info("✅ VCC Service Integration started")
+        else:
+            logger.info("ℹ️ VCC Service Integration disabled (set VCC_SERVICE_INTEGRATION_ENABLED=true to enable)")
+        
+        # Initialize Database Migration Manager (Phase 1 Feature)
+        enable_db_migration = os.getenv("VCC_DB_MIGRATION_ENABLED", "true").lower() == "true"
+        if enable_db_migration:
+            db_config = DatabaseConfig.from_env()
+            db_migration = DatabaseMigration(db_config)
+            # Add Database Migration routes
+            app.include_router(create_migration_router(db_migration))
+            logger.info("✅ Database Migration Manager initialized")
+            
+            # Run pending migrations if auto-migrate is enabled
+            if db_config.auto_migrate:
+                try:
+                    applied = db_migration.run_migrations()
+                    if applied:
+                        logger.info(f"✅ Applied {len(applied)} database migrations: {applied}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Database migration failed: {e}")
+        else:
+            logger.info("ℹ️ Database Migration Manager disabled (set VCC_DB_MIGRATION_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -291,6 +330,11 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down VCC PKI Server...")
+    
+    # Stop VCC Service Integration
+    if vcc_integration:
+        await vcc_integration.stop()
+        logger.info("✅ VCC Service Integration stopped")
     
     # Stop CRL Distribution Point
     if crl_distribution:
