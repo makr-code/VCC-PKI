@@ -688,6 +688,238 @@ class TestDatabaseMigration:
 
 
 # ============================================================================
+# Monitoring Dashboard Tests
+# ============================================================================
+
+class TestMonitoringDashboard:
+    """Tests for the Monitoring Dashboard"""
+    
+    def test_import(self):
+        """Test that monitoring_dashboard can be imported"""
+        from monitoring_dashboard import MonitoringDashboard, DashboardConfig
+        assert MonitoringDashboard is not None
+        assert DashboardConfig is not None
+    
+    def test_config_defaults(self):
+        """Test default configuration values"""
+        from monitoring_dashboard import DashboardConfig
+        
+        config = DashboardConfig()
+        
+        assert config.warning_threshold_days == 30
+        assert config.critical_threshold_days == 14
+        assert config.max_alerts == 100
+        assert config.enable_notifications == True
+    
+    def test_dashboard_initialization(self):
+        """Test dashboard initialization"""
+        from monitoring_dashboard import MonitoringDashboard, DashboardConfig
+        
+        config = DashboardConfig(
+            warning_threshold_days=45,
+            critical_threshold_days=21
+        )
+        
+        dashboard = MonitoringDashboard(config)
+        
+        assert dashboard.config.warning_threshold_days == 45
+        assert dashboard.config.critical_threshold_days == 21
+    
+    def test_certificate_metrics_dataclass(self):
+        """Test CertificateMetrics dataclass"""
+        from monitoring_dashboard import CertificateMetrics
+        
+        metrics = CertificateMetrics(
+            total_certificates=10,
+            active_certificates=8,
+            expired_certificates=1,
+            revoked_certificates=1
+        )
+        
+        assert metrics.total_certificates == 10
+        assert metrics.active_certificates == 8
+        
+        # Test to_dict
+        result = metrics.to_dict()
+        assert result["total_certificates"] == 10
+    
+    def test_alert_creation(self):
+        """Test alert creation"""
+        from monitoring_dashboard import MonitoringDashboard, AlertSeverity
+        
+        dashboard = MonitoringDashboard()
+        
+        alert = dashboard.create_alert(
+            severity=AlertSeverity.WARNING,
+            title="Test Alert",
+            message="This is a test alert",
+            source="test"
+        )
+        
+        assert alert.severity == AlertSeverity.WARNING
+        assert alert.title == "Test Alert"
+        assert alert.acknowledged == False
+    
+    def test_alert_acknowledgement(self):
+        """Test alert acknowledgement"""
+        from monitoring_dashboard import MonitoringDashboard, AlertSeverity
+        
+        dashboard = MonitoringDashboard()
+        
+        alert = dashboard.create_alert(
+            severity=AlertSeverity.CRITICAL,
+            title="Critical Alert",
+            message="Critical issue",
+            source="system"
+        )
+        
+        # Acknowledge the alert
+        result = dashboard.acknowledge_alert(alert.alert_id, "admin")
+        
+        assert result == True
+        
+        # Get alerts and verify
+        alerts = dashboard.get_alerts()
+        assert len(alerts) == 1
+        assert alerts[0].acknowledged == True
+        assert alerts[0].acknowledged_by == "admin"
+    
+    def test_alert_summary(self):
+        """Test alert summary"""
+        from monitoring_dashboard import MonitoringDashboard, AlertSeverity
+        
+        dashboard = MonitoringDashboard()
+        
+        # Create various alerts
+        dashboard.create_alert(AlertSeverity.INFO, "Info", "Info message", "test")
+        dashboard.create_alert(AlertSeverity.WARNING, "Warning", "Warning message", "test")
+        dashboard.create_alert(AlertSeverity.CRITICAL, "Critical", "Critical message", "test")
+        
+        summary = dashboard.get_alert_summary()
+        
+        assert summary["info"] == 1
+        assert summary["warning"] == 1
+        assert summary["critical"] == 1
+        assert summary["total"] == 3
+        assert summary["unacknowledged"] == 3
+    
+    def test_system_metrics(self):
+        """Test system metrics collection"""
+        from monitoring_dashboard import MonitoringDashboard
+        
+        dashboard = MonitoringDashboard()
+        
+        # Record some requests
+        dashboard.record_request(50.0)
+        dashboard.record_request(100.0)
+        dashboard.record_request(75.0)
+        
+        metrics = dashboard.get_system_metrics()
+        
+        assert metrics.total_requests == 3
+        assert metrics.avg_response_time_ms == 75.0
+
+
+# ============================================================================
+# OCSP Stapling Tests
+# ============================================================================
+
+class TestOCSPStapling:
+    """Tests for OCSP Stapling"""
+    
+    def test_import(self):
+        """Test that ocsp_stapling can be imported"""
+        from ocsp_stapling import OCSPStaplingManager, OCSPStaplingConfig
+        assert OCSPStaplingManager is not None
+        assert OCSPStaplingConfig is not None
+    
+    def test_config_defaults(self):
+        """Test default configuration values"""
+        from ocsp_stapling import OCSPStaplingConfig
+        
+        config = OCSPStaplingConfig()
+        
+        assert config.enabled == True
+        assert config.update_interval_seconds == 3600
+        assert config.response_validity_hours == 24
+        assert config.max_cache_size == 1000
+    
+    def test_config_custom(self):
+        """Test custom configuration values"""
+        from ocsp_stapling import OCSPStaplingConfig
+        
+        config = OCSPStaplingConfig(
+            enabled=False,
+            update_interval_seconds=1800,
+            max_cache_size=500
+        )
+        
+        assert config.enabled == False
+        assert config.update_interval_seconds == 1800
+        assert config.max_cache_size == 500
+    
+    def test_staple_status_enum(self):
+        """Test OCSPStapleStatus enum"""
+        from ocsp_stapling import OCSPStapleStatus
+        
+        assert OCSPStapleStatus.VALID.value == "valid"
+        assert OCSPStapleStatus.EXPIRED.value == "expired"
+        assert OCSPStapleStatus.UNKNOWN.value == "unknown"
+        assert OCSPStapleStatus.ERROR.value == "error"
+    
+    def test_staple_dataclass(self):
+        """Test OCSPStaple dataclass"""
+        from ocsp_stapling import OCSPStaple, OCSPStapleStatus
+        from datetime import datetime, timedelta, timezone
+        
+        now = datetime.now(timezone.utc)
+        valid_until = now + timedelta(hours=24)
+        
+        staple = OCSPStaple(
+            serial_number="abc123",
+            certificate_fingerprint="fingerprint123",
+            ocsp_response=b"response_bytes",
+            created_at=now,
+            valid_until=valid_until,
+            status=OCSPStapleStatus.VALID
+        )
+        
+        assert staple.serial_number == "abc123"
+        assert staple.is_valid() == True
+        
+        # Test expired staple
+        expired_staple = OCSPStaple(
+            serial_number="xyz789",
+            certificate_fingerprint="fingerprint456",
+            ocsp_response=b"response_bytes",
+            created_at=now - timedelta(hours=48),
+            valid_until=now - timedelta(hours=24),
+            status=OCSPStapleStatus.VALID
+        )
+        
+        assert expired_staple.is_valid() == False
+    
+    def test_stapling_statistics(self):
+        """Test StaplingStatistics dataclass"""
+        from ocsp_stapling import StaplingStatistics
+        
+        stats = StaplingStatistics(
+            total_staples=10,
+            valid_staples=8,
+            cache_hits=50,
+            cache_misses=5
+        )
+        
+        assert stats.total_staples == 10
+        assert stats.valid_staples == 8
+        
+        # Test to_dict
+        result = stats.to_dict()
+        assert result["cache_hits"] == 50
+        assert result["cache_misses"] == 5
+
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 

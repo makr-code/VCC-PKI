@@ -81,6 +81,8 @@ from vcc_service_integration import (
     create_vcc_integration_router
 )
 from database_migration import DatabaseMigration, DatabaseConfig, create_migration_router
+from monitoring_dashboard import MonitoringDashboard, DashboardConfig, create_monitoring_router
+from ocsp_stapling import OCSPStaplingManager, OCSPStaplingConfig, create_stapling_router
 
 # Import database models
 from database import (
@@ -208,12 +210,14 @@ ocsp_responder: Optional[OCSPResponder] = None
 crl_distribution: Optional[CRLDistributionPoint] = None
 vcc_integration: Optional[VCCServiceIntegration] = None
 db_migration: Optional[DatabaseMigration] = None
+monitoring_dashboard: Optional[MonitoringDashboard] = None
+ocsp_stapling: Optional[OCSPStaplingManager] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
-    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution, vcc_integration, db_migration
+    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder, crl_distribution, vcc_integration, db_migration, monitoring_dashboard, ocsp_stapling
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -315,6 +319,29 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("ℹ️ Database Migration Manager disabled (set VCC_DB_MIGRATION_ENABLED=true to enable)")
         
+        # Initialize Monitoring Dashboard (Phase 1 Feature)
+        enable_monitoring = os.getenv("VCC_MONITORING_ENABLED", "true").lower() == "true"
+        if enable_monitoring:
+            dashboard_config = DashboardConfig.from_env()
+            monitoring_dashboard = MonitoringDashboard(dashboard_config)
+            # Add Monitoring Dashboard routes
+            app.include_router(create_monitoring_router(monitoring_dashboard))
+            logger.info("✅ Monitoring Dashboard initialized")
+        else:
+            logger.info("ℹ️ Monitoring Dashboard disabled (set VCC_MONITORING_ENABLED=true to enable)")
+        
+        # Initialize OCSP Stapling (Phase 1 Feature)
+        enable_stapling = os.getenv("VCC_OCSP_STAPLING_ENABLED", "true").lower() == "true"
+        if enable_stapling and ocsp_responder:
+            stapling_config = OCSPStaplingConfig.from_env()
+            ocsp_stapling = OCSPStaplingManager(ocsp_responder, stapling_config)
+            ocsp_stapling.start()
+            # Add OCSP Stapling routes
+            app.include_router(create_stapling_router(ocsp_stapling))
+            logger.info("✅ OCSP Stapling Manager started")
+        else:
+            logger.info("ℹ️ OCSP Stapling disabled (set VCC_OCSP_STAPLING_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -330,6 +357,11 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down VCC PKI Server...")
+    
+    # Stop OCSP Stapling
+    if ocsp_stapling:
+        ocsp_stapling.stop()
+        logger.info("✅ OCSP Stapling Manager stopped")
     
     # Stop VCC Service Integration
     if vcc_integration:
