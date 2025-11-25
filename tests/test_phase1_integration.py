@@ -920,6 +920,394 @@ class TestOCSPStapling:
 
 
 # ============================================================================
+# Phase 2 Tests - HSM Integration
+# ============================================================================
+
+class TestHSMIntegration:
+    """Tests for the HSM Integration Module (Phase 2)"""
+    
+    def test_import(self):
+        """Test that hsm_integration can be imported"""
+        from hsm_integration import HSMManager, HSMConfig, KeyType, KeyPurpose
+        assert HSMManager is not None
+        assert HSMConfig is not None
+        assert KeyType is not None
+        assert KeyPurpose is not None
+    
+    def test_config_defaults(self):
+        """Test default configuration values"""
+        from hsm_integration import HSMConfig, HSMType, KeyType
+        
+        config = HSMConfig()
+        
+        assert config.hsm_type == HSMType.SOFTHSM
+        assert config.slot_id == 0
+        assert config.token_label == "VCC-PKI"
+        assert config.default_key_type == KeyType.RSA_4096
+        assert config.require_dual_auth == False
+    
+    def test_key_type_enum(self):
+        """Test KeyType enum values"""
+        from hsm_integration import KeyType
+        
+        assert KeyType.RSA_2048.value == "rsa_2048"
+        assert KeyType.RSA_4096.value == "rsa_4096"
+        assert KeyType.ECC_P256.value == "ecc_p256"
+        assert KeyType.ECC_P384.value == "ecc_p384"
+        assert KeyType.ECC_P521.value == "ecc_p521"
+    
+    def test_key_purpose_enum(self):
+        """Test KeyPurpose enum values"""
+        from hsm_integration import KeyPurpose
+        
+        assert KeyPurpose.ROOT_CA.value == "root_ca"
+        assert KeyPurpose.INTERMEDIATE_CA.value == "intermediate_ca"
+        assert KeyPurpose.SERVICE_SIGNING.value == "service_signing"
+        assert KeyPurpose.CODE_SIGNING.value == "code_signing"
+        assert KeyPurpose.TSA_SIGNING.value == "tsa_signing"
+    
+    def test_hsm_key_info_dataclass(self):
+        """Test HSMKeyInfo dataclass"""
+        from hsm_integration import HSMKeyInfo, KeyType, KeyPurpose
+        from datetime import datetime
+        
+        key_info = HSMKeyInfo(
+            key_id="test-key-123",
+            key_label="test-key",
+            key_type=KeyType.RSA_4096,
+            purpose=KeyPurpose.SERVICE_SIGNING,
+            created_at=datetime.utcnow()
+        )
+        
+        assert key_info.key_id == "test-key-123"
+        assert key_info.key_type == KeyType.RSA_4096
+        assert key_info.is_extractable == False
+        assert key_info.is_persistent == True
+    
+    def test_auth_session_dataclass(self):
+        """Test AuthSession dataclass"""
+        from hsm_integration import AuthSession
+        from datetime import datetime, timedelta
+        
+        session = AuthSession(
+            session_id="session-123",
+            required_persons=2,
+            authenticated_persons=["admin1"],
+            operation="generate_ca_key",
+            expires_at=datetime.utcnow() + timedelta(minutes=5)
+        )
+        
+        assert session.session_id == "session-123"
+        assert session.required_persons == 2
+        assert len(session.authenticated_persons) == 1
+        assert session.is_valid == True
+    
+    def test_softhsm_backend(self):
+        """Test SoftHSM backend initialization"""
+        from hsm_integration import SoftHSMBackend, HSMConfig
+        
+        config = HSMConfig()
+        backend = SoftHSMBackend(config)
+        
+        assert backend.is_connected() == False
+        
+        # Connect
+        result = backend.connect()
+        assert result == True
+        assert backend.is_connected() == True
+        
+        # Disconnect
+        backend.disconnect()
+        assert backend.is_connected() == False
+    
+    def test_hsm_manager_status(self):
+        """Test HSM Manager status"""
+        from hsm_integration import HSMManager, HSMConfig, HSMStatus
+        
+        config = HSMConfig()
+        manager = HSMManager(config)
+        
+        # Before connecting
+        assert manager.status == HSMStatus.DISCONNECTED
+        
+        # After connecting
+        manager.connect()
+        assert manager.status == HSMStatus.CONNECTED
+        
+        manager.disconnect()
+
+
+# ============================================================================
+# Phase 2 Tests - Timestamp Authority
+# ============================================================================
+
+class TestTimestampAuthority:
+    """Tests for the Timestamp Authority Module (Phase 2)"""
+    
+    def test_import(self):
+        """Test that timestamp_authority can be imported"""
+        from timestamp_authority import TimestampAuthority, TSAConfig, HashAlgorithm
+        assert TimestampAuthority is not None
+        assert TSAConfig is not None
+        assert HashAlgorithm is not None
+    
+    def test_config_defaults(self):
+        """Test default configuration values"""
+        from timestamp_authority import TSAConfig
+        
+        config = TSAConfig()
+        
+        assert config.enabled == True
+        assert config.tsa_name == "VCC Timestamp Authority"
+        assert config.accuracy_seconds == 1
+        assert config.ordering == True
+        assert "sha256" in config.supported_algorithms
+    
+    def test_hash_algorithm_enum(self):
+        """Test HashAlgorithm enum values"""
+        from timestamp_authority import HashAlgorithm
+        
+        assert HashAlgorithm.SHA256.value == "sha256"
+        assert HashAlgorithm.SHA384.value == "sha384"
+        assert HashAlgorithm.SHA512.value == "sha512"
+    
+    def test_tsa_status_enum(self):
+        """Test TSAStatus enum values"""
+        from timestamp_authority import TSAStatus
+        
+        assert TSAStatus.GRANTED.value == "granted"
+        assert TSAStatus.REJECTION.value == "rejection"
+        assert TSAStatus.WAITING.value == "waiting"
+    
+    def test_timestamp_request_dataclass(self):
+        """Test TimestampRequest dataclass"""
+        from timestamp_authority import TimestampRequest, HashAlgorithm
+        
+        request = TimestampRequest(
+            message_imprint_hash=b'x' * 32,
+            hash_algorithm=HashAlgorithm.SHA256,
+            nonce=12345,
+            cert_req=True
+        )
+        
+        assert len(request.message_imprint_hash) == 32
+        assert request.hash_algorithm == HashAlgorithm.SHA256
+        assert request.nonce == 12345
+    
+    def test_timestamp_token_dataclass(self):
+        """Test TimestampToken dataclass"""
+        from timestamp_authority import TimestampToken, HashAlgorithm
+        from datetime import datetime, timezone
+        
+        token = TimestampToken(
+            serial_number=123456,
+            gen_time=datetime.now(timezone.utc),
+            message_imprint_hash=b'x' * 32,
+            hash_algorithm=HashAlgorithm.SHA256,
+            policy_oid="1.2.3.4.5",
+            accuracy_seconds=1,
+            accuracy_millis=0,
+            accuracy_micros=0,
+            ordering=True,
+            nonce=12345,
+            tsa_name="Test TSA",
+            signature=b'signature'
+        )
+        
+        assert token.serial_number == 123456
+        assert token.accuracy_seconds == 1
+        assert token.ordering == True
+    
+    def test_tsa_statistics_dataclass(self):
+        """Test TSAStatistics dataclass"""
+        from timestamp_authority import TSAStatistics
+        
+        stats = TSAStatistics(
+            total_requests=100,
+            total_granted=95,
+            total_rejected=5,
+            requests_sha256=80
+        )
+        
+        assert stats.total_requests == 100
+        assert stats.total_granted == 95
+        assert stats.requests_sha256 == 80
+
+
+# ============================================================================
+# Phase 2 Tests - Certificate Templates
+# ============================================================================
+
+class TestCertificateTemplates:
+    """Tests for the Certificate Templates Module (Phase 2)"""
+    
+    def test_import(self):
+        """Test that certificate_templates can be imported"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        assert CertificateTemplateManager is not None
+        assert TemplateConfig is not None
+    
+    def test_config_defaults(self):
+        """Test default configuration values"""
+        from certificate_templates import TemplateConfig
+        
+        config = TemplateConfig()
+        
+        assert config.templates_path == "../templates"
+        assert config.auto_load == True
+        assert config.strict_validation == True
+    
+    def test_template_type_enum(self):
+        """Test TemplateType enum values"""
+        from certificate_templates import TemplateType
+        
+        assert TemplateType.SERVICE.value == "service"
+        assert TemplateType.CODE_SIGNING.value == "code_signing"
+        assert TemplateType.TLS_SERVER.value == "tls_server"
+        assert TemplateType.ADMIN.value == "admin"
+        assert TemplateType.TSA.value == "tsa"
+    
+    def test_key_usage_flags_enum(self):
+        """Test KeyUsageFlags enum"""
+        from certificate_templates import KeyUsageFlags
+        
+        assert KeyUsageFlags.DIGITAL_SIGNATURE.value == "digital_signature"
+        assert KeyUsageFlags.KEY_ENCIPHERMENT.value == "key_encipherment"
+        assert KeyUsageFlags.KEY_CERT_SIGN.value == "key_cert_sign"
+    
+    def test_extended_key_usage_enum(self):
+        """Test ExtendedKeyUsage enum"""
+        from certificate_templates import ExtendedKeyUsage
+        
+        assert ExtendedKeyUsage.SERVER_AUTH.value == "server_auth"
+        assert ExtendedKeyUsage.CLIENT_AUTH.value == "client_auth"
+        assert ExtendedKeyUsage.CODE_SIGNING.value == "code_signing"
+        assert ExtendedKeyUsage.TIME_STAMPING.value == "time_stamping"
+    
+    def test_subject_config_dataclass(self):
+        """Test SubjectConfig dataclass"""
+        from certificate_templates import SubjectConfig
+        
+        subject = SubjectConfig(
+            country="DE",
+            state="Brandenburg",
+            organization="VCC",
+            common_name="test.vcc.local"
+        )
+        
+        assert subject.country == "DE"
+        assert subject.organization == "VCC"
+    
+    def test_validity_config_dataclass(self):
+        """Test ValidityConfig dataclass"""
+        from certificate_templates import ValidityConfig
+        
+        validity = ValidityConfig(
+            days=365,
+            max_days=730,
+            renewable=True
+        )
+        
+        assert validity.days == 365
+        assert validity.max_days == 730
+        assert validity.renewable == True
+    
+    def test_certificate_template_dataclass(self):
+        """Test CertificateTemplate dataclass"""
+        from certificate_templates import CertificateTemplate, TemplateType
+        
+        template = CertificateTemplate(
+            template_id="test-template",
+            template_name="Test Template",
+            template_type=TemplateType.SERVICE,
+            description="A test template"
+        )
+        
+        assert template.template_id == "test-template"
+        assert template.template_type == TemplateType.SERVICE
+        assert template.key_size == 4096  # Default
+    
+    def test_template_manager_predefined_templates(self):
+        """Test that predefined templates are loaded"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        
+        config = TemplateConfig(auto_load=False)
+        manager = CertificateTemplateManager(config)
+        
+        # Check predefined templates exist
+        templates = manager.list_templates()
+        template_ids = [t["template_id"] for t in templates]
+        
+        assert "vcc-service" in template_ids
+        assert "vcc-code-signing" in template_ids
+        assert "vcc-clara-model" in template_ids
+        assert "vcc-tls-server" in template_ids
+        assert "vcc-admin" in template_ids
+        assert "vcc-tsa" in template_ids
+    
+    def test_get_template(self):
+        """Test getting a specific template"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        
+        config = TemplateConfig(auto_load=False)
+        manager = CertificateTemplateManager(config)
+        
+        template = manager.get_template("vcc-service")
+        
+        assert template is not None
+        assert template.template_id == "vcc-service"
+        assert template.key_size == 4096
+    
+    def test_variable_substitution(self):
+        """Test variable substitution in templates"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        
+        config = TemplateConfig(auto_load=False)
+        manager = CertificateTemplateManager(config)
+        
+        resolved = manager.get_resolved_template(
+            "vcc-service",
+            {"service_name": "my-service"}
+        )
+        
+        assert resolved is not None
+        assert "my-service" in resolved.subject.common_name
+    
+    def test_validate_request_valid(self):
+        """Test request validation - valid request"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        
+        config = TemplateConfig(auto_load=False)
+        manager = CertificateTemplateManager(config)
+        
+        is_valid, errors = manager.validate_request(
+            "vcc-service",
+            {"service_name": "my-service"},
+            365
+        )
+        
+        assert is_valid == True
+        assert len(errors) == 0
+    
+    def test_validate_request_invalid_validity(self):
+        """Test request validation - invalid validity period"""
+        from certificate_templates import CertificateTemplateManager, TemplateConfig
+        
+        config = TemplateConfig(auto_load=False)
+        manager = CertificateTemplateManager(config)
+        
+        # Request validity exceeds max
+        is_valid, errors = manager.validate_request(
+            "vcc-service",
+            {"service_name": "my-service"},
+            1000  # Exceeds max_days of 730
+        )
+        
+        assert is_valid == False
+        assert len(errors) > 0
+
+
+# ============================================================================
 # Run Tests
 # ============================================================================
 
