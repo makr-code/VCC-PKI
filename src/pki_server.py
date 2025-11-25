@@ -73,6 +73,8 @@ import uvicorn
 # Import PKI components
 from ca_manager import CAManager
 from service_cert_manager import ServiceCertificateManager
+from auto_renewal_engine import AutoRenewalEngine, RenewalConfig, create_auto_renewal_engine
+from ocsp_responder import OCSPResponder, OCSPCertStatus, create_ocsp_responder
 
 # Import database models
 from database import (
@@ -195,12 +197,14 @@ class APIResponse(BaseModel):
 # PKI Managers (initialized in lifespan)
 ca_manager: Optional[CAManager] = None
 cert_manager: Optional[ServiceCertificateManager] = None
+auto_renewal_engine: Optional[AutoRenewalEngine] = None
+ocsp_responder: Optional[OCSPResponder] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup/shutdown"""
-    global ca_manager, cert_manager
+    global ca_manager, cert_manager, auto_renewal_engine, ocsp_responder
     
     # Startup
     logger.info("🚀 Starting VCC PKI Server...")
@@ -224,6 +228,37 @@ async def lifespan(app: FastAPI):
         init_database()
         logger.info("✅ Database initialized")
         
+        # Initialize Auto-Renewal Engine (Phase 1 Feature)
+        enable_auto_renewal = os.getenv("VCC_AUTO_RENEWAL_ENABLED", "true").lower() == "true"
+        if enable_auto_renewal:
+            renewal_config = RenewalConfig(
+                renewal_threshold_days=int(os.getenv("VCC_RENEWAL_THRESHOLD_DAYS", "30")),
+                warning_threshold_days=int(os.getenv("VCC_WARNING_THRESHOLD_DAYS", "14")),
+                critical_threshold_days=int(os.getenv("VCC_CRITICAL_THRESHOLD_DAYS", "7")),
+                check_interval_seconds=int(os.getenv("VCC_CHECK_INTERVAL_SECONDS", "3600")),
+                max_retry_attempts=int(os.getenv("VCC_MAX_RETRY_ATTEMPTS", "3")),
+                enable_notifications=os.getenv("VCC_NOTIFICATIONS_ENABLED", "true").lower() == "true"
+            )
+            auto_renewal_engine = create_auto_renewal_engine(cert_manager, renewal_config)
+            auto_renewal_engine.start()
+            logger.info("✅ Auto-Renewal Engine started")
+        else:
+            logger.info("ℹ️ Auto-Renewal Engine disabled (set VCC_AUTO_RENEWAL_ENABLED=true to enable)")
+        
+        # Initialize OCSP Responder (Phase 1 Feature)
+        enable_ocsp = os.getenv("VCC_OCSP_ENABLED", "true").lower() == "true"
+        if enable_ocsp:
+            ocsp_cache_ttl = int(os.getenv("VCC_OCSP_CACHE_TTL", "3600"))
+            ocsp_validity = int(os.getenv("VCC_OCSP_VALIDITY_HOURS", "24"))
+            ocsp_responder = create_ocsp_responder(
+                ca_manager=ca_manager,
+                cache_ttl_seconds=ocsp_cache_ttl,
+                response_validity_hours=ocsp_validity
+            )
+            logger.info("✅ OCSP Responder initialized")
+        else:
+            logger.info("ℹ️ OCSP Responder disabled (set VCC_OCSP_ENABLED=true to enable)")
+        
         # Check for JSON migration (legacy service_registry.json)
         registry_file = Path("../database/service_registry.json")
         if registry_file.exists():
@@ -239,6 +274,12 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down VCC PKI Server...")
+    
+    # Stop Auto-Renewal Engine
+    if auto_renewal_engine:
+        auto_renewal_engine.stop()
+        logger.info("✅ Auto-Renewal Engine stopped")
+    
     logger.info("👋 VCC PKI Server stopped")
 
 
@@ -1049,6 +1090,274 @@ async def get_crl(db: Session = Depends(get_db)):
         
     except Exception as e:
         logger.error(f"❌ Failed to get CRL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Auto-Renewal Engine Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/auto-renewal/status")
+async def get_auto_renewal_status():
+    """
+    Get status of the auto-renewal engine.
+    
+    Returns engine statistics and current state.
+    """
+    if auto_renewal_engine is None:
+        return {
+            "enabled": False,
+            "message": "Auto-renewal engine is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "running": auto_renewal_engine.is_running,
+        "statistics": auto_renewal_engine.statistics,
+        "config": {
+            "renewal_threshold_days": auto_renewal_engine.config.renewal_threshold_days,
+            "warning_threshold_days": auto_renewal_engine.config.warning_threshold_days,
+            "critical_threshold_days": auto_renewal_engine.config.critical_threshold_days,
+            "check_interval_seconds": auto_renewal_engine.config.check_interval_seconds,
+            "max_retry_attempts": auto_renewal_engine.config.max_retry_attempts
+        }
+    }
+
+
+@app.get("/api/v1/auto-renewal/certificates")
+async def get_certificates_renewal_status():
+    """
+    Get renewal status of all active certificates.
+    
+    Returns list of certificates with their renewal status (ok/scheduled/warning/critical).
+    """
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not enabled"
+        )
+    
+    try:
+        certificates = auto_renewal_engine.get_certificates_status()
+        
+        # Group by status for summary
+        status_counts = {"ok": 0, "scheduled": 0, "warning": 0, "critical": 0}
+        for cert in certificates:
+            status_counts[cert["renewal_status"]] += 1
+        
+        return {
+            "total_certificates": len(certificates),
+            "status_summary": status_counts,
+            "certificates": certificates
+        }
+    except Exception as e:
+        logger.error(f"❌ Failed to get certificate renewal status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/force-check")
+async def force_renewal_check():
+    """
+    Force an immediate certificate renewal check.
+    
+    Useful for testing or when immediate renewal is needed.
+    """
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not enabled"
+        )
+    
+    try:
+        logger.info("⚡ Manual renewal check triggered via API")
+        auto_renewal_engine.force_check()
+        
+        return APIResponse(
+            success=True,
+            message="Renewal check completed",
+            data={"statistics": auto_renewal_engine.statistics}
+        )
+    except Exception as e:
+        logger.error(f"❌ Forced renewal check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/start")
+async def start_auto_renewal():
+    """Start the auto-renewal engine if it's stopped."""
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not configured"
+        )
+    
+    if auto_renewal_engine.is_running:
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine is already running"
+        )
+    
+    try:
+        auto_renewal_engine.start()
+        logger.info("✅ Auto-renewal engine started via API")
+        
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine started"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to start auto-renewal engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/auto-renewal/stop")
+async def stop_auto_renewal():
+    """Stop the auto-renewal engine."""
+    if auto_renewal_engine is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-renewal engine is not configured"
+        )
+    
+    if not auto_renewal_engine.is_running:
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine is already stopped"
+        )
+    
+    try:
+        auto_renewal_engine.stop()
+        logger.info("✅ Auto-renewal engine stopped via API")
+        
+        return APIResponse(
+            success=True,
+            message="Auto-renewal engine stopped"
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to stop auto-renewal engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# OCSP Responder Endpoints (Phase 1 Feature)
+# ============================================================================
+
+@app.get("/api/v1/ocsp/status")
+async def get_ocsp_status():
+    """
+    Get status of the OCSP responder.
+    
+    Returns responder statistics and current state.
+    """
+    if ocsp_responder is None:
+        return {
+            "enabled": False,
+            "message": "OCSP responder is not enabled"
+        }
+    
+    return {
+        "enabled": True,
+        "statistics": ocsp_responder.statistics,
+        "certificate_summary": ocsp_responder.get_status_summary()
+    }
+
+
+@app.get("/api/v1/ocsp/check/{serial_number}")
+async def check_certificate_ocsp_status(serial_number: str):
+    """
+    Check certificate status via OCSP.
+    
+    Args:
+        serial_number: Certificate serial number (hex string)
+    
+    Returns:
+        OCSP status information for the certificate
+    """
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        response = ocsp_responder.check_certificate_status(serial_number)
+        
+        result = {
+            "serial_number": response.serial_number,
+            "status": response.status.value,
+            "this_update": response.this_update.isoformat(),
+            "next_update": response.next_update.isoformat()
+        }
+        
+        if response.status == OCSPCertStatus.REVOKED:
+            result["revocation_time"] = response.revocation_time.isoformat() if response.revocation_time else None
+            result["revocation_reason"] = response.revocation_reason.name if response.revocation_reason else None
+        
+        return result
+    except Exception as e:
+        logger.error(f"❌ OCSP status check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/ocsp")
+async def handle_ocsp_request(request: Request):
+    """
+    RFC 6960 OCSP request endpoint.
+    
+    Accepts DER-encoded OCSP request in request body.
+    Returns DER-encoded OCSP response.
+    
+    Content-Type: application/ocsp-request
+    """
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        # Read request body
+        request_bytes = await request.body()
+        
+        if not request_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Empty OCSP request"
+            )
+        
+        # Handle OCSP request
+        response_bytes = ocsp_responder.handle_ocsp_request(request_bytes)
+        
+        return Response(
+            content=response_bytes,
+            media_type="application/ocsp-response"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ OCSP request handling failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/ocsp/clear-cache")
+async def clear_ocsp_cache():
+    """Clear the OCSP response cache."""
+    if ocsp_responder is None:
+        raise HTTPException(
+            status_code=503,
+            detail="OCSP responder is not enabled"
+        )
+    
+    try:
+        ocsp_responder.clear_cache()
+        
+        return APIResponse(
+            success=True,
+            message="OCSP cache cleared",
+            data={"new_cache_size": ocsp_responder.cache.size}
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to clear OCSP cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
