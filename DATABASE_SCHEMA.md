@@ -62,10 +62,10 @@ The VCC PKI Server uses a SQLite database with SQLAlchemy ORM for managing:
 │  certificates   │              │ rotation_schedule    │
 └────────┬────────┘              └──────────────────────┘
          │
-         │ 1:1                   ┌──────────────────────┐
-         ├───────────────────────│ service_health_hist  │
-         │                       └──────────────────────┘
-         │ 1:1
+         │ 0..1:1                ┌────────────────────────────┐
+         ├───────────────────────│ service_health_history     │
+         │                       └────────────────────────────┘
+         │ 0..1
          ▼
 ┌─────────────────┐
 │   crl_entries   │

@@ -48,7 +48,7 @@
 - ✅ **DATABASE_SCHEMA.md** (733 Zeilen)
   - Alle 7 Datenbank-Tabellen dokumentiert
   - ER-Diagramm
-  - Felderbeschreibungen und Constraints
+  - Feldbeschreibungen und Constraints
   - Beziehungen zwischen Tabellen
   - Verwendungsbeispiele mit SQLAlchemy
   - Migrations-Strategie
