@@ -1,5 +1,7 @@
 # VCC-PKI - Public Key Infrastructure System
 
+⚠️ **SICHERHEITSHINWEIS**: Dieses System verwaltet kryptografische Schlüssel und Zertifikate. Bitte lesen Sie [SECURITY.md](SECURITY.md) vor dem Deployment.
+
 Vollständiges PKI-System für das VCC-Projekt mit Certificate Authority, Code-Signing und Service-Zertifikaten.
 
 ## 📋 Übersicht
@@ -8,6 +10,30 @@ Vollständiges PKI-System für das VCC-Projekt mit Certificate Authority, Code-S
 
 **Technologie-Stack:**
 Python, FastAPI, cryptography, SQLite, Docker
+
+## ⚠️ Sicherheitsanforderungen
+
+**Vor dem ersten Start:**
+
+1. **Konfigurieren Sie sichere Passwörter:**
+   ```bash
+   cp .env.example .env
+   # Bearbeiten Sie .env mit starken, einzigartigen Passwörtern
+   chmod 600 .env
+   ```
+
+2. **Production-Deployment:**
+   - Verwenden Sie einen Secret-Management-Service (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault)
+   - Aktivieren Sie mTLS für Service-to-Service Kommunikation
+   - Setzen Sie restriktive Dateiberechtigungen (chmod 400 für Keys)
+   - Lesen Sie die [Production Deployment Checklist](SECURITY.md#deployment-security)
+
+3. **Security Check vor Deployment:**
+   ```bash
+   ./scripts/security-check.sh
+   ```
+
+Weitere Details: [SECURITY.md](SECURITY.md)
 
 ## ✨ Hauptfunktionen
 
@@ -138,6 +164,42 @@ VCC-PKI entwickelt sich zu einer **Enterprise-Grade PKI-Infrastruktur** mit:
 
 Mehr Details in der [Weiterentwicklungsstrategie](VCC_PKI_WEITERENTWICKLUNGSSTRATEGIE.md).
 
+## 🔒 Sicherheit
+
+### Kritische Sicherheitshinweise
+
+1. **Niemals** Passwörter hardcodieren oder commiten
+2. **Immer** private Schlüssel verschlüsseln (minimum 16-Zeichen Passwort)
+3. **Immer** restriktive Dateiberechtigungen setzen (chmod 400 für Keys)
+4. In Production: Secret Management System verwenden (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault)
+5. mTLS für alle Service-to-Service Kommunikation aktivieren
+
+### Sicherheits-Check
+
+```bash
+# Vor jedem Deployment ausführen
+./scripts/security-check.sh
+```
+
+### Passwort-Anforderungen
+
+- Minimum 16 Zeichen
+- Mix aus Groß-/Kleinbuchstaben, Zahlen, Sonderzeichen
+- Unterschiedliche Passwörter für Dev, Staging, Production
+- Rotation alle 90 Tage
+
+### Compliance
+
+- **DSGVO**: Datenschutz-konform
+- **BSI TR-02102**: Kryptografische Verfahren
+- **CA/Browser Forum**: Baseline Requirements
+
+Vollständige Sicherheitsdokumentation: [SECURITY.md](SECURITY.md)
+
+## 📋 Änderungsprotokoll
+
+Siehe [CHANGELOG.md](CHANGELOG.md) für alle Änderungen und Versionshinweise.
+
 ---
 
-*Letzte Aktualisierung: 23.11.2025*
+*Letzte Aktualisierung: 16.12.2025*

@@ -14,6 +14,7 @@ Production-Ready Cryptographic Operations:
 
 import os
 import hashlib
+import warnings
 from typing import Tuple, Optional
 from datetime import datetime
 
@@ -31,7 +32,8 @@ from cryptography.x509.oid import NameOID
 
 def generate_keypair(
     key_size: int = 2048,
-    public_exponent: int = 65537
+    public_exponent: int = 65537,
+    password: Optional[bytes] = None
 ) -> Tuple[bytes, bytes]:
     """
     Generate RSA key pair.
@@ -39,6 +41,7 @@ def generate_keypair(
     Args:
         key_size: RSA key size in bits (2048, 3072, or 4096)
         public_exponent: RSA public exponent (default: 65537)
+        password: Optional password to encrypt the private key (RECOMMENDED for production)
     
     Returns:
         Tuple of (private_key_pem, public_key_pem)
@@ -47,10 +50,16 @@ def generate_keypair(
         ValueError: If key_size is not supported
         RuntimeError: If key generation fails
     
+    Security:
+        - For production use, always provide a password to encrypt the private key
+        - Use key_size >= 2048 bits (4096 recommended for long-term keys)
+        - Store private keys securely with restricted file permissions (chmod 600)
+    
     Example:
+        >>> # Production use - with password protection
+        >>> private_key, public_key = generate_keypair(4096, password=b"strong_password")
+        >>> # Development only - without password (NOT RECOMMENDED)
         >>> private_key, public_key = generate_keypair(2048)
-        >>> print(f"Private Key: {len(private_key)} bytes")
-        Private Key: 1679 bytes
     """
     if key_size not in [2048, 3072, 4096]:
         raise ValueError(f"Unsupported key size: {key_size}. Use 2048, 3072, or 4096.")
@@ -63,11 +72,24 @@ def generate_keypair(
             backend=default_backend()
         )
         
+        # Determine encryption algorithm
+        if password:
+            encryption_algorithm = serialization.BestAvailableEncryption(password)
+        else:
+            encryption_algorithm = serialization.NoEncryption()
+            # Warn about unencrypted key (development only)
+            warnings.warn(
+                "Private key is not encrypted. This is only suitable for development. "
+                "Always encrypt private keys in production using the password parameter.",
+                UserWarning,
+                stacklevel=2
+            )
+        
         # Serialize private key to PEM
         private_key_pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
+            encryption_algorithm=encryption_algorithm
         )
         
         # Serialize public key to PEM
