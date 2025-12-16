@@ -148,3 +148,19 @@ test_signature.json
 *.bak
 *.swp
 *~
+
+# Security-sensitive files
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+secrets/
+vault/
+.secrets
+*.secret
+ca_storage/*.pem
+ca_storage/*.key
+service_certificates/**/*.key
+service_certificates/**/*.pem

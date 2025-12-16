@@ -489,6 +489,30 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# ============================================================================
+# Security Middleware
+# ============================================================================
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+    
+    # Security headers (OWASP recommendations)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    # Remove server header (don't expose server details)
+    if "Server" in response.headers:
+        del response.headers["Server"]
+    
+    return response
+
 # Security
 security = HTTPBearer()
 
@@ -498,9 +522,21 @@ security = HTTPBearer()
 # ============================================================================
 
 def get_ca_password() -> str:
-    """Get CA password from environment or config"""
-    # In production, this should come from secure vault (Azure Key Vault, AWS Secrets Manager, etc.)
-    password = os.getenv("VCC_INTERMEDIATE_CA_PASSWORD", "vcc_intermediate_pw_2025")
+    """
+    Get CA password from environment or config.
+    
+    Security: Password must be set via VCC_INTERMEDIATE_CA_PASSWORD environment variable.
+    In production, this should come from a secure vault (Azure Key Vault, AWS Secrets Manager, etc.)
+    
+    Raises:
+        ValueError: If password is not configured
+    """
+    password = os.getenv("VCC_INTERMEDIATE_CA_PASSWORD")
+    if not password:
+        raise ValueError(
+            "CA password not configured. Set VCC_INTERMEDIATE_CA_PASSWORD environment variable. "
+            "For production, use a secure secret management system (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault)."
+        )
     return password
 
 
@@ -514,10 +550,78 @@ def audit_log(
     error_message: Optional[str] = None,
     request: Optional[Request] = None
 ):
-    """Log audit event to database"""
+    """
+    Log audit event to database.
+    
+    Security: Sensitive data (passwords, private keys) is automatically filtered.
+    """
     try:
         # Get client IP if request provided
         ip_address = None
+        if request:
+            # Handle proxied requests (X-Forwarded-For)
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                ip_address = forwarded_for.split(",")[0].strip()
+            else:
+                ip_address = request.client.host if request.client else None
+        
+        # Filter sensitive data from details
+        filtered_details = _filter_sensitive_data(details.copy())
+        
+        # Create audit log entry
+        log_entry = AuditLog(
+            action=action,
+            service_id=service_id,
+            certificate_id=certificate_id,
+            user_id="system",  # TODO: Add authentication
+            ip_address=ip_address,
+            details=json.dumps(filtered_details),
+            success=success,
+            error_message=error_message
+        )
+        
+        db.add(log_entry)
+        db.commit()
+        
+        # Also log to file for immediate visibility
+        logger.info(
+            f"AUDIT: {action} | service={service_id} | "
+            f"cert={certificate_id} | success={success} | ip={ip_address}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to write audit log: {e}")
+        # Don't fail the operation if audit logging fails
+
+
+def _filter_sensitive_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Filter sensitive information from audit log details.
+    
+    Removes or masks: passwords, private keys, tokens, secrets
+    """
+    sensitive_keys = [
+        "password", "passwd", "pwd", "secret", "token", "api_key", 
+        "private_key", "key", "authorization", "auth", "credential"
+    ]
+    
+    for key in list(data.keys()):
+        key_lower = key.lower()
+        # Check if key contains sensitive information
+        if any(sensitive in key_lower for sensitive in sensitive_keys):
+            data[key] = "***REDACTED***"
+        # Recursively filter nested dictionaries
+        elif isinstance(data[key], dict):
+            data[key] = _filter_sensitive_data(data[key])
+        # Filter lists of dictionaries
+        elif isinstance(data[key], list):
+            data[key] = [
+                _filter_sensitive_data(item) if isinstance(item, dict) else item
+                for item in data[key]
+            ]
+    
+    return data
         if request:
             ip_address = request.client.host if request.client else None
         
