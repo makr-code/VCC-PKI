@@ -1,8 +1,29 @@
 # VCC PKI Server - Project Status
 
-**Status:** ✅ **100% COMPLETE**  
-**Date:** 13. Oktober 2025  
-**Version:** 1.0.0
+**Status:** ✅ **100% COMPLETE + Security Hardened**  
+**Date:** 16. Dezember 2025  
+**Version:** 1.0.1  
+**Letztes Update:** Security Audit & Best Practices
+
+---
+
+## 🔒 Security Update (16. Dezember 2025)
+
+**Security Hardening abgeschlossen:**
+- ✅ Hardcoded Passwörter entfernt
+- ✅ Security Headers implementiert
+- ✅ Input Validation erweitert
+- ✅ Audit Logging mit Sensitive-Data-Filtering
+- ✅ Deployment Security Checklist erstellt
+- ✅ Umfassende Sicherheitsdokumentation (SECURITY.md)
+
+**Neue Sicherheitsfeatures:**
+- Automatische Sensitive-Data-Filterung in Logs
+- OWASP-konforme HTTP Security Headers
+- Zertifikatsparameter-Validierung
+- Production Deployment Check-Script
+
+Siehe [CHANGELOG.md](CHANGELOG.md) für Details.
 
 ---
 

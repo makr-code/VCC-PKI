@@ -30,6 +30,149 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from crypto_utils import generate_keypair
 
 
+def validate_service_id(service_id: str) -> None:
+    """
+    Validate service ID format.
+    
+    Rules:
+    - Only lowercase letters, numbers, and hyphens
+    - 3-64 characters
+    - Must start with a letter
+    - Cannot end with hyphen
+    
+    Raises:
+        ValueError: If service_id is invalid
+    """
+    if not service_id:
+        raise ValueError("service_id cannot be empty")
+    
+    if len(service_id) < 3 or len(service_id) > 64:
+        raise ValueError("service_id must be 3-64 characters")
+    
+    if not service_id[0].isalpha():
+        raise ValueError("service_id must start with a letter")
+    
+    if service_id.endswith("-"):
+        raise ValueError("service_id cannot end with hyphen")
+    
+    if not all(c.islower() or c.isdigit() or c == "-" for c in service_id):
+        raise ValueError("service_id must contain only lowercase letters, numbers, and hyphens")
+
+
+def validate_common_name(common_name: str) -> None:
+    """
+    Validate certificate common name.
+    
+    Rules:
+    - 3-253 characters (DNS hostname max length)
+    - Valid hostname format
+    
+    Raises:
+        ValueError: If common_name is invalid
+    """
+    if not common_name:
+        raise ValueError("common_name cannot be empty")
+    
+    if len(common_name) < 3 or len(common_name) > 253:
+        raise ValueError("common_name must be 3-253 characters")
+    
+    # Basic hostname validation
+    import re
+    hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
+    if not re.match(hostname_pattern, common_name):
+        raise ValueError("common_name must be a valid hostname")
+
+
+def validate_san_dns(san_dns: List[str]) -> None:
+    """
+    Validate DNS Subject Alternative Names.
+    
+    Raises:
+        ValueError: If any DNS name is invalid
+    """
+    if not san_dns:
+        return
+    
+    if len(san_dns) > 100:
+        raise ValueError("Maximum 100 DNS SANs allowed")
+    
+    import re
+    hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
+    wildcard_pattern = r'^\*\.[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
+    
+    for dns in san_dns:
+        if not dns:
+            raise ValueError("DNS SAN cannot be empty")
+        if len(dns) > 253:
+            raise ValueError(f"DNS SAN '{dns}' exceeds 253 characters")
+        if not (re.match(hostname_pattern, dns) or re.match(wildcard_pattern, dns)):
+            raise ValueError(f"Invalid DNS SAN format: '{dns}'")
+
+
+def validate_san_ip(san_ip: List[str]) -> None:
+    """
+    Validate IP Subject Alternative Names.
+    
+    Raises:
+        ValueError: If any IP address is invalid
+    """
+    if not san_ip:
+        return
+    
+    if len(san_ip) > 100:
+        raise ValueError("Maximum 100 IP SANs allowed")
+    
+    from ipaddress import IPv4Address, IPv6Address, AddressValueError
+    
+    for ip in san_ip:
+        try:
+            # Try to parse as IPv4 or IPv6
+            try:
+                IPv4Address(ip)
+            except AddressValueError:
+                IPv6Address(ip)
+        except AddressValueError:
+            raise ValueError(f"Invalid IP address: '{ip}'")
+
+
+def validate_validity_days(validity_days: int) -> None:
+    """
+    Validate certificate validity period.
+    
+    Rules:
+    - Minimum 1 day
+    - Maximum 730 days (2 years, per CA/Browser Forum Baseline Requirements)
+    
+    Raises:
+        ValueError: If validity_days is invalid
+    """
+    if validity_days < 1:
+        raise ValueError("validity_days must be at least 1")
+    
+    if validity_days > 730:
+        raise ValueError(
+            "validity_days cannot exceed 730 days (2 years) per CA/Browser Forum requirements"
+        )
+
+
+def validate_key_size(key_size: int) -> None:
+    """
+    Validate RSA key size.
+    
+    Rules:
+    - Must be 2048, 3072, or 4096 bits
+    - 2048 is minimum for security
+    - 4096 recommended for long-term certificates
+    
+    Raises:
+        ValueError: If key_size is invalid
+    """
+    if key_size not in [2048, 3072, 4096]:
+        raise ValueError(
+            f"key_size must be 2048, 3072, or 4096 bits (got {key_size})"
+        )
+
+
 class ServiceCertificateManager:
     """
     Service Certificate Manager for VCC PKI Server.
@@ -99,6 +242,14 @@ class ServiceCertificateManager:
         print(f"🔐 Issuing certificate for service: {service_id}")
         print(f"   Common Name: {common_name}")
         print()
+        
+        # Validate input parameters
+        validate_service_id(service_id)
+        validate_common_name(common_name)
+        validate_san_dns(san_dns or [])
+        validate_san_ip(san_ip or [])
+        validate_validity_days(validity_days)
+        validate_key_size(key_size)
         
         # Check if service already has active certificate
         registry = self._load_registry()
