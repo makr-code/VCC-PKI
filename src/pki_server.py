@@ -622,29 +622,6 @@ def _filter_sensitive_data(data: Dict[str, Any]) -> Dict[str, Any]:
             ]
     
     return data
-        if request:
-            ip_address = request.client.host if request.client else None
-        
-        # Create audit log entry
-        audit_entry = AuditLog(
-            action=action,
-            service_id=service_id,
-            certificate_id=certificate_id,
-            user_id="system",  # TODO: Add authentication
-            ip_address=ip_address,
-            details=details,
-            success=success,
-            error_message=error_message
-        )
-        
-        db.add(audit_entry)
-        db.commit()
-        
-        logger.info(f"📝 Audit: {action} for {service_id} - {'Success' if success else 'Failed'}")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to write audit log: {e}")
-        db.rollback()
 
 
 def verify_service_auth(authorization: Optional[str] = Header(None)) -> str:

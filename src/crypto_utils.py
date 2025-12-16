@@ -14,6 +14,7 @@ Production-Ready Cryptographic Operations:
 
 import os
 import hashlib
+import warnings
 from typing import Tuple, Optional
 from datetime import datetime
 
@@ -77,7 +78,6 @@ def generate_keypair(
         else:
             encryption_algorithm = serialization.NoEncryption()
             # Warn about unencrypted key (development only)
-            import warnings
             warnings.warn(
                 "Private key is not encrypted. This is only suitable for development. "
                 "Always encrypt private keys in production using the password parameter.",

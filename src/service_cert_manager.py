@@ -17,9 +17,11 @@ import os
 import json
 import uuid
 import hashlib
+import re
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any, Tuple
+from ipaddress import IPv4Address, IPv6Address, AddressValueError
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID, ExtensionOID
@@ -77,7 +79,6 @@ def validate_common_name(common_name: str) -> None:
         raise ValueError("common_name must be 3-253 characters")
     
     # Basic hostname validation
-    import re
     hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
     if not re.match(hostname_pattern, common_name):
         raise ValueError("common_name must be a valid hostname")
@@ -96,7 +97,6 @@ def validate_san_dns(san_dns: List[str]) -> None:
     if len(san_dns) > 100:
         raise ValueError("Maximum 100 DNS SANs allowed")
     
-    import re
     hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
     wildcard_pattern = r'^\*\.[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$'
     
@@ -121,8 +121,6 @@ def validate_san_ip(san_ip: List[str]) -> None:
     
     if len(san_ip) > 100:
         raise ValueError("Maximum 100 IP SANs allowed")
-    
-    from ipaddress import IPv4Address, IPv6Address, AddressValueError
     
     for ip in san_ip:
         try:
